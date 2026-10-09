@@ -1,0 +1,11 @@
+# Fetched Kenney source packs (regenerate with `npm run assets:fetch`).
+# The prepared runtime models in public/models/ ARE deployed.
+public/assets/
+
+# Build outputs (Vercel builds remotely)
+.next/
+out/
+
+# OS / editor
+.DS_Store
+Thumbs.db
