@@ -109,12 +109,10 @@ export class MissionSystem {
     return mission
   }
 
-  /** Mark a destroyed car if it's a rampage target. */
-  notifyCarDestroyed(car: VehicleEntity) {
+  /** Count a wreck toward the active rampage mission (any car counts). */
+  notifyCarDestroyed(_car: VehicleEntity) {
     if (!this.current || this.current.kind !== 'rampage') return
-    if (this.current.targets.includes(car)) {
-      this.current.destroyed++
-    }
+    this.current.destroyed++
   }
 
   /** True if the position is at the current objective. */
@@ -183,6 +181,11 @@ export class MissionSystem {
   private fail() {
     this.current = null
     this.marker.visible = false
+  }
+
+  /** Drop the active mission without reward (e.g. player died). */
+  abandon() {
+    this.fail()
   }
 
   /** HUD text for the current mission. */

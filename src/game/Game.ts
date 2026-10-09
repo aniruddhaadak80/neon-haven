@@ -14,7 +14,7 @@ import { WantedSystem } from './systems/Wanted'
 import { MissionSystem } from './systems/Missions'
 import { hud } from './systems/HudStore'
 import { getVehicleModel, TRAFFIC_MODELS, CHARACTER_KEYS, getStaticGeometry, getTexture } from './assets/AssetLibrary'
-import { clamp, damp, damp as dampN, dist2D, formatDist } from './utils'
+import { clamp, damp, dist2D, formatDist } from './utils'
 import type { Vehicle, SaveData } from './types'
 
 export class Game {
@@ -55,6 +55,7 @@ export class Game {
   private ownedWeapons: string[] = ['pistol']
   private weapon = 'pistol'
   private pickups: { group: THREE.Group; ring: THREE.Mesh; pos: THREE.Vector3; weapon: string; active: boolean; respawn: number; phase: number }[] = []
+  private armorPickups: { group: THREE.Group; pos: THREE.Vector3; active: boolean; respawn: number; phase: number }[] = []
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
@@ -108,9 +109,20 @@ export class Game {
   }
 
   // --- Lifecycle ---
+  private starting = false
   async start() {
+    // Guard against double-clicks / StrictMode re-entry.
+    if (this.starting || hud.state.phase === 'playing') return
+    this.starting = true
     hud.set({ phase: 'loading', loadFrac: 0, loadLabel: 'waking up' })
-    await this.load()
+    try {
+      await this.load()
+    } catch (err) {
+      this.starting = false
+      hud.set({ phase: 'menu' })
+      hud.toast(`Failed to start: ${err instanceof Error ? err.message : String(err)}`, 'bad')
+      throw err
+    }
     hud.set({ phase: 'playing' })
     this.audio.start()
     this.startTime = performance.now()
@@ -165,6 +177,11 @@ export class Game {
     // Weapon pickups scattered through the city
     hud.set({ loadFrac: 0.96, loadLabel: 'hiding weapons' })
     await this.spawnPickups()
+    this.spawnArmor()
+
+    // Snap the camera to the spawn so the first frame isn't a cross-map swoop.
+    this.camPos.set(this.city.spawn.x, CAMERA.FOOT_HEIGHT + 1, this.city.spawn.z - CAMERA.FOOT_DIST)
+    this.camTarget.copy(this.city.spawn).add(new THREE.Vector3(0, 1.4, 0))
 
     hud.set({ loadFrac: 1, loadLabel: 'done' })
   }
@@ -201,14 +218,20 @@ export class Game {
 
   private randomSidewalkPos(center: THREE.Vector3, minD: number, maxD: number): THREE.Vector3 {
     const city = this.city!
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const ang = Math.random() * Math.PI * 2
-      const d = minD + Math.random() * (maxD - minD)
-      const x = center.x + Math.cos(ang) * d
-      const z = center.z + Math.sin(ang) * d
-      if (!isBlocked(city, x, z)) return new THREE.Vector3(x, 0, z)
+    // Prefer street tiles: they are never blocked, so spawns are always valid.
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const i = Math.floor(Math.random() * city.size)
+      const j = Math.floor(Math.random() * city.size)
+      const x = city.origin + i + 0.5
+      const z = city.origin + j + 0.5
+      if (isBlocked(city, x, z)) continue
+      const d = Math.hypot(x - center.x, z - center.z)
+      if (d >= minD && d <= maxD) return new THREE.Vector3(x, 0, z)
     }
-    return center.clone()
+    // Fall back to a random street intersection.
+    const sx = city.streetsX[Math.floor(Math.random() * city.streetsX.length)]!
+    const sz = city.streetsZ[Math.floor(Math.random() * city.streetsZ.length)]!
+    return new THREE.Vector3(sx, 0, sz)
   }
 
   pause() {
@@ -269,6 +292,13 @@ export class Game {
       }
     }
 
+    // --- Radio (R toggle, T next station) ---
+    if (this.input.consume('radio')) this.toggleRadio()
+    if (this.input.consume('station')) {
+      this.nextRadioStation()
+      hud.toast(`Radio ${this.audio.radioStation + 1}`, 'info')
+    }
+
     // --- Pickups ---
     this.updatePickups(dt)
 
@@ -277,13 +307,30 @@ export class Game {
 
     // --- World systems ---
     this.traffic.update(dt, this.player.pos, this.player.vehicle)
-    this.police.update(dt, this.wanted.level, this.player.pos, this.player.vehicle, this.player.dead)
+    const policeDamage = this.police.update(dt, this.wanted.level, this.player.pos, this.player.vehicle, this.player.dead)
+    if (policeDamage > 0 && !this.player.dead) {
+      if (this.player.isDriving && this.player.vehicle) {
+        // Gunfire chews up the getaway car first.
+        const destroyed = this.player.vehicle.damageBy(policeDamage)
+        if (destroyed) this.onCarDestroyed(this.player.vehicle)
+      } else {
+        this.damagePlayer(policeDamage)
+      }
+    }
+    // Cars (traffic + police) hitting the on-foot player.
+    this.updatePlayerRunover(dt)
     this.updatePeds(dt)
     this.updateVehicleCollisions(dt)
     this.updateBullets(dt)
     const missionResult = this.missions.update(dt, this.player.pos, this.wanted.level)
     if (missionResult === 'done') this.completeMission()
     else if (missionResult === 'failed') this.failMission()
+    else if (!this.missions.current) {
+      const offered = this.missions.maybeOffer(dt, this.player.pos, this.wanted.level)
+      if (offered) {
+        hud.toast(`New job: ${offered.title} — $${offered.reward}`, 'info')
+      }
+    }
     this.dayNight.update(dt, this.camPos)
     this.particles.update(dt)
 
@@ -299,11 +346,23 @@ export class Game {
     // --- Audio ---
     if (this.player.isDriving && this.player.vehicle) {
       this.audio.updateEngine(Math.abs(this.player.vehicle.speed) / CAR.MAX_SPEED, 0.5)
-      this.audio.setSiren(false)
     } else {
       this.audio.updateEngine(0, 0)
     }
+    // Sirens wail while any cop car is hunting you.
+    this.audio.setSiren(this.police.cars.length > 0 && this.wanted.level > 0)
     this.audio.updateSiren(performance.now() / 1000)
+
+    // Headlights at night: player car + nearby cruisers.
+    const night = this.dayNight.isNight
+    if (this.player.vehicle) this.player.vehicle.setHeadlights(night)
+    for (const v of this.vehicles) {
+      if (v !== this.player.vehicle && v.headlights) v.setHeadlights(false)
+    }
+    for (const c of this.police.cars) {
+      const near = dist2D(c.pos.x, c.pos.z, this.player.pos.x, this.player.pos.z) < 60
+      c.setHeadlights(night && near)
+    }
 
     // --- HUD ---
     this.updateHud(dt)
@@ -338,8 +397,8 @@ export class Game {
     this.player.pos.x = clamp(this.player.pos.x, -b, b)
     this.player.pos.z = clamp(this.player.pos.z, -b, b)
 
-    // Enter vehicle
-    if (this.input.consume('interact') || (input.touch.active && input.touch.action)) {
+    // Enter vehicle (keyboard F, or touch USE button via the 'interact' edge)
+    if (this.input.consume('interact')) {
       this.tryEnterVehicle()
     }
 
@@ -354,22 +413,47 @@ export class Game {
   private tryEnterVehicle() {
     let best: VehicleEntity | null = null
     let bestD: number = PLAYER.ENTER_CAR_DIST
-    for (const v of this.vehicles) {
-      if (v.dead) continue
+    // Any car is fair game: parked, traffic, even police.
+    const candidates = [...this.vehicles, ...this.traffic.cars, ...this.police.cars]
+    for (const v of candidates) {
+      if (v.dead || v.driven) continue
       const d = dist2D(v.pos.x, v.pos.z, this.player.pos.x, this.player.pos.z)
       if (d < bestD) { bestD = d; best = v }
     }
     if (best) {
+      // Carjacked out of traffic: pull it out of the AI fleets.
+      this.removeFromFleets(best)
+      if (!this.vehicles.includes(best)) this.vehicles.push(best)
       this.player.enterVehicle(best)
       this.audio.startEngine()
-      hud.toast(`Driving ${best.model}`, 'info')
+      this.wanted.addCrime(WANTED.STEAL_CAR)
+      this.stats.crimes++
+      hud.toast(best.police ? 'You stole a cop car!' : `Driving ${best.model}`, best.police ? 'bad' : 'info')
     }
+  }
+
+  private removeFromFleets(v: VehicleEntity) {
+    const t = this.traffic.cars.indexOf(v)
+    if (t >= 0) this.traffic.cars.splice(t, 1)
+    const p = this.police.cars.indexOf(v)
+    if (p >= 0) this.police.cars.splice(p, 1)
   }
 
   // --- Driving ---
   private updateDriving(dt: number) {
     const v = this.player.vehicle!
     const input = this.input.state
+
+    // Wreck destroyed under you → bail out with burns.
+    if (v.dead) {
+      this.player.exitVehicle()
+      this.audio.stopEngine()
+      this.audio.explosion()
+      this.particles.explosion(v.pos.clone().setY(0.6))
+      this.damagePlayer(25)
+      hud.toast('Your ride blew up!', 'bad')
+      return
+    }
 
     const throttle = (input.forward ? 1 : 0) - (input.back ? 1 : 0) + (input.touch.active ? -input.touch.y : 0)
     const steer = (input.left ? 1 : 0) - (input.right ? 1 : 0) + (input.touch.active ? -input.touch.x : 0)
@@ -416,8 +500,8 @@ export class Game {
     // Distance stat
     this.stats.distance += Math.abs(v.speed) * dt
 
-    // Exit vehicle
-    if (this.input.consume('interact') || (input.touch.active && input.touch.action)) {
+    // Exit vehicle (keyboard F, or touch USE button via the 'interact' edge)
+    if (this.input.consume('interact')) {
       this.player.exitVehicle()
       this.audio.stopEngine()
     }
@@ -476,6 +560,64 @@ export class Game {
     this.camera.lookAt(this.camTarget)
   }
 
+  // --- Player damage + death ---
+  private damagePlayer(amount: number) {
+    if (this.player.dead) return
+    hud.set({ damageFlash: Math.min(1, hud.state.damageFlash + 0.45) })
+    const died = this.player.damageBy(amount)
+    if (died) this.onPlayerDeath()
+  }
+
+  /** Fast AI cars plough into the on-foot player. */
+  private updatePlayerRunover(dt: number) {
+    if (this.player.dead || this.player.isDriving) return
+    for (const car of [...this.traffic.cars, ...this.police.cars]) {
+      if (car.dead) continue
+      const r = Math.max(car.halfW, car.halfL) * 0.8 + PLAYER.RADIUS
+      if (dist2D(car.pos.x, car.pos.z, this.player.pos.x, this.player.pos.z) < r) {
+        const speed = Math.hypot(car.vel.x, car.vel.z)
+        if (speed > 3) {
+          this.damagePlayer(speed * 2.2 * dt * 60 * 0.08)
+          // Shove the player out of the way.
+          const dx = this.player.pos.x - car.pos.x
+          const dz = this.player.pos.z - car.pos.z
+          const d = Math.hypot(dx, dz) || 1
+          this.player.pos.x += (dx / d) * speed * dt * 0.6
+          this.player.pos.z += (dz / d) * speed * dt * 0.6
+          this.audio.impact(Math.min(1, speed / 12))
+        }
+      }
+    }
+  }
+
+  private onPlayerDeath() {
+    this.audio.stopEngine()
+    this.audio.setSiren(false)
+    this.audio.explosion()
+    this.particles.explosion(this.player.pos.clone().setY(0.8))
+    if (this.player.vehicle) {
+      this.player.vehicle.driven = false
+      this.player.vehicle = null
+    }
+    this.wanted.reset()
+    this.police.clear()
+    this.missions.abandon()
+    hud.set({ phase: 'dead' })
+    this.input.exitLock()
+    this.persist()
+  }
+
+  /** Called from the death screen. Hospital respawn: lose 10% cash, heat cleared. */
+  respawn() {
+    const fee = Math.floor(this.save.money * 0.1)
+    this.save.money -= fee
+    this.player.respawn(this.city!.spawn)
+    this.camPos.copy(this.city!.spawn)
+    hud.set({ phase: 'playing', damageFlash: 0 })
+    hud.toast(fee > 0 ? `Hospital bill: -$${fee}` : 'Patched up and back out', 'info')
+    this.input.requestLock()
+    this.persist()
+  }
   // --- Peds ---
   private updatePeds(dt: number) {
     const playerVehicle = this.player.vehicle
@@ -564,6 +706,7 @@ export class Game {
 
   private onCarDestroyed(car: VehicleEntity) {
     this.stats.carsDestroyed++
+    this.missions.notifyCarDestroyed(car)
     this.audio.explosion()
     this.particles.explosion(car.pos.clone().setY(0.5))
     this.camShake = Math.min(1, this.camShake + 0.4)
@@ -617,9 +760,54 @@ export class Game {
         }
       }
     }
+
+    // Armor shards
+    for (const a of this.armorPickups) {
+      if (!a.active) {
+        a.respawn -= dt
+        if (a.respawn <= 0) {
+          a.active = true
+          a.group.visible = true
+        }
+        continue
+      }
+      a.group.rotation.y += dt * 2
+      a.group.position.y = Math.sin(now * 2.4 + a.phase) * 0.12
+      if (!this.player.isDriving && !this.player.dead) {
+        if (dist2D(a.pos.x, a.pos.z, this.player.pos.x, this.player.pos.z) < PICKUPS.PICKUP_DIST) {
+          a.active = false
+          a.respawn = PICKUPS.RESPAWN_TIME
+          a.group.visible = false
+          this.player.armor = Math.min(100, this.player.armor + 50)
+          hud.toast('+50 armor', 'good')
+          this.particles.burst(this.player.pos.clone().setY(1), 12, 0x3b82f6, 3, 0.5, 1, 3, 0.8)
+        }
+      }
+    }
   }
 
-  // --- Shooting ---
+  /** Blue armor shards: +50 armor each, respawn over time. */
+  private spawnArmor() {
+    for (let i = 0; i < 4; i++) {
+      const core = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.35),
+        new THREE.MeshBasicMaterial({ color: 0x3b82f6 }),
+      )
+      core.position.y = 0.9
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.45, 0.58, 24),
+        new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }),
+      )
+      ring.rotation.x = -Math.PI / 2
+      ring.position.y = 0.05
+      const group = new THREE.Group()
+      group.add(core, ring)
+      const pos = this.randomSidewalkPos(this.city!.spawn, 10, 60)
+      group.position.copy(pos)
+      this.scene.add(group)
+      this.armorPickups.push({ group, pos, active: true, respawn: 0, phase: Math.random() * Math.PI * 2 })
+    }
+  }
   private shootFromPlayer() {
     const def = WEAPONS[this.weapon]!
     this.audio.gunshot(def.pitch)
@@ -638,8 +826,11 @@ export class Game {
 
     const targets: THREE.Object3D[] = []
     for (const p of this.peds) targets.push(p.group)
-    for (const v of this.vehicles) targets.push(v.group)
+    for (const v of this.vehicles) {
+      if (v !== this.player.vehicle) targets.push(v.group)
+    }
     for (const v of this.traffic.cars) targets.push(v.group)
+    for (const v of this.police.cars) targets.push(v.group)
 
     const hits = ray.intersectObjects(targets, true)
     if (hits.length > 0) {
@@ -744,6 +935,11 @@ export class Game {
     if (this.audio.radioOn) this.audio.setRadio(true, this.audio.radioStation)
   }
 
+  /** Touch UI grabs the input through here. */
+  getInput(): Input {
+    return this.input
+  }
+
   setMinimapCanvas(canvas: HTMLCanvasElement | null) {
     this.minimapCanvas = canvas
   }
@@ -804,6 +1000,14 @@ export class Game {
       ctx.fillRect(mx - 2 * u, mz - 2 * u, 4 * u, 4 * u)
     }
 
+    // Armor shards
+    for (const a of this.armorPickups) {
+      if (!a.active) continue
+      const [mx, mz] = toMap(a.pos.x, a.pos.z)
+      ctx.fillStyle = '#3b82f6'
+      ctx.fillRect(mx - 2 * u, mz - 2 * u, 4 * u, 4 * u)
+    }
+
     // Mission marker
     const m = this.missions.current
     if (m) {
@@ -853,7 +1057,7 @@ export class Game {
       // Legend
       ctx.fillStyle = 'rgba(255,255,255,0.75)'
       ctx.font = `${13 * u}px sans-serif`
-      ctx.fillText('▲ you   ● police   ■ traffic   ■ weapon pickup   ● mission', 12 * u, S - 12 * u)
+      ctx.fillText('▲ you   ● police   ■ traffic   ■ weapon   ■ armor   ● mission', 12 * u, S - 12 * u)
     }
 
     // Border

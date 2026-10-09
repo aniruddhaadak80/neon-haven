@@ -97,6 +97,7 @@ export class Input {
     }
     if (e.code === 'KeyF') { this.state.interact = true; this.edge.add('interact') }
     if (e.code === 'KeyR') { this.state.radio = true; this.edge.add('radio') }
+    if (e.code === 'KeyT') this.edge.add('station')
     if (e.code === 'KeyV') { this.state.camera = true; this.edge.add('camera') }
     if (e.code === 'Digit1') this.edge.add('weapon1')
     if (e.code === 'Digit2') this.edge.add('weapon2')
@@ -151,6 +152,18 @@ export class Input {
       return true
     }
     return false
+  }
+
+  /** Touch controls write here. `action` should be pulsed, not latched. */
+  setTouch(patch: Partial<InputState['touch']>) {
+    Object.assign(this.state.touch, patch)
+    if (patch.action) this.edge.add('interact')
+  }
+
+  /** Touch jump button: edge on press, level follows the hold. */
+  setJump(down: boolean) {
+    this.state.jump = down
+    if (down) this.edge.add('jump')
   }
 
   /** Clear per-frame deltas. Call at end of frame. */

@@ -80,6 +80,9 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
   const nature = new GeoBatch(natMat)
   const urban = new GeoBatch(urbanMat)
   const proto = new GeoBatch(protoMat)
+  // Street furniture (lights, signs, poles, barriers) is *road-kit* geometry,
+  // so it belongs in the road batch — its UVs index the road atlas.
+  const streetProps = roads
 
   const colliders = new Uint8Array(N * N)
   const block = (i: number, j: number, r: number) => {
@@ -182,7 +185,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
             const model = pick(rng, skyscrapers)
             const h = randRange(rng, 1.4, 2.6)
             commercial.add(await loadGeo('commercial', model), mat4(tileToWorld(i), tileToWorld(j), 0, h))
-            block(i, j, 1)
+            block(i, j, 0)
             placed++
             // Neon strip on the face.
             if (rng() < 0.7) {
@@ -205,7 +208,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
             const model = pick(rng, commercialB)
             const h = randRange(rng, 0.9, 1.9)
             commercial.add(await loadGeo('commercial', model), mat4(tileToWorld(i), tileToWorld(j), 0, h))
-            block(i, j, 1)
+            block(i, j, 0)
             placed++
             if (rng() < 0.3) {
               const mat = new THREE.MeshBasicMaterial({ color: pick(rng, neonColors) })
@@ -227,7 +230,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
             const j = j0 + dj * 2
             if (i > i1 || j > j1) continue
             suburban.add(await loadGeo('suburban', pick(rng, suburbanB)), mat4(tileToWorld(i), tileToWorld(j), 0, randRange(rng, 0.9, 1.3)))
-            block(i, j, 1)
+            block(i, j, 0)
             placed++
             if (rng() < 0.6) {
               nature.add(await loadGeo('nature', pick(rng, trees)), mat4(tileToWorld(i) + randRange(rng, 0.8, 1.4), tileToWorld(j) + randRange(rng, 0.8, 1.4), 0, randRange(rng, 0.7, 1.1)))
@@ -244,7 +247,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
         const j = j0 + Math.floor(randRange(rng, 0, 3))
         if (i > i1 || j > j1) continue
         industrial.add(await loadGeo('industrial', pick(rng, industrialB)), mat4(tileToWorld(i), tileToWorld(j), 0, randRange(rng, 1.0, 1.6)))
-        block(i, j, 1)
+        block(i, j, 0)
         placed++
       }
       // crates + barrels
@@ -273,16 +276,16 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
       const x = tileToWorld(i)
       const z = tileToWorld(j)
       // Street lights on two corners of every intersection.
-      urban.add(lightSquare, mat4(x + 0.8, z + 0.8, 0, 1.4))
-      urban.add(lightSquare, mat4(x - 0.8, z - 0.8, 0, 1.4))
+      streetProps.add(lightSquare, mat4(x + 0.8, z + 0.8, 0, 1.4))
+      streetProps.add(lightSquare, mat4(x - 0.8, z - 0.8, 0, 1.4))
       if ((k + m) % 2 === 0) {
-        urban.add(trafficLight, mat4(x + 0.9, z - 0.9, Math.PI / 2, 1.2))
+        streetProps.add(trafficLight, mat4(x + 0.9, z - 0.9, Math.PI / 2, 1.2))
       }
       if ((k + m) % 3 === 0) {
-        urban.add(signStreet, mat4(x - 0.9, z + 0.9, Math.PI, 1.2))
+        streetProps.add(signStreet, mat4(x - 0.9, z + 0.9, Math.PI, 1.2))
       }
       if ((k * 7 + m * 13) % 5 === 0) {
-        urban.add(dumpster, mat4(x + 1.1, z + 0.4, randRange(rng, 0, 3), 1.2))
+        streetProps.add(dumpster, mat4(x + 1.1, z + 0.4, randRange(rng, 0, 3), 1.2))
       }
       if ((k * 3 + m * 11) % 7 === 0) {
         urban.add(bench, mat4(x - 1.1, z - 0.4, Math.PI / 2, 1.2))
@@ -294,7 +297,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
   for (let k = 0; k <= BLOCKS; k++) {
     for (let t = 0; t < N; t += 4) {
       if (rng() < 0.4) {
-        urban.add(pole, mat4(tileToWorld(k * SPACING) + 1.2, tileToWorld(t), 0, 1.3))
+        streetProps.add(pole, mat4(tileToWorld(k * SPACING) + 1.2, tileToWorld(t), 0, 1.3))
       }
     }
   }
@@ -304,7 +307,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
     const i = Math.floor(randRange(rng, 1, N - 1))
     const j = Math.floor(randRange(rng, 1, N - 1))
     if (i % SPACING === 0 || j % SPACING === 0) {
-      urban.add(barrier, mat4(tileToWorld(i) + 0.6, tileToWorld(j) + 0.6, randRange(rng, 0, 3), 1.2))
+      streetProps.add(barrier, mat4(tileToWorld(i) + 0.6, tileToWorld(j) + 0.6, randRange(rng, 0, 3), 1.2))
     }
   }
 

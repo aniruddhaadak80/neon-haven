@@ -28,8 +28,9 @@ Open http://localhost:3000 and click **START GAME**.
 - **Open-world city** — procedurally generated downtown with districts (skyscrapers, suburbs, industrial, parks), traffic lights, street lights, neon signs, and a full day/night cycle with a shader sky dome. The same seed always builds the same city.
 - **Drivable vehicles** — 19 car models with custom arcade physics: acceleration, braking, drifting (handbrake), body roll, spinning/steering wheels, and collisions. Enter/exit any car with `F`.
 - **On-foot mode** — walk, sprint, jump, and shoot with a third-person camera and pointer-lock mouse look.
-- **Weapon pickups** — floating blasters hidden through the city: SMG, Rifle, and Heavy, each with its own damage, fire rate, tracer color, and gunshot pitch. Switch with `1–4`.
-- **Wanted system** — commit crimes (hit pedestrians, ram cars, shoot) and police heat rises through 5 stars. Police cars chase, ram, and shoot back. Escape by staying out of sight to drop stars.
+- **Weapon pickups** — floating blasters hidden through the city: SMG, Rifle, and Heavy, each with its own damage, fire rate, tracer color, and gunshot pitch. Switch with `1–4`. Blue armor shards give +50 armor.
+- **Wanted system** — commit crimes (hit pedestrians, ram cars, shoot, steal cars) and police heat rises through 5 stars. Police cars chase, ram, and shoot back — gunfire chews up your car first, then you. Getaway driving matters: escape by staying out of sight to drop stars.
+- **Death matters** — get killed and you wake up at the hospital minus 10% cash, heat cleared, mission dropped.
 - **Missions** — procedurally generated courier, rampage, getaway, and taxi jobs with timers, map markers, and cash rewards.
 - **Living world** — 16 AI traffic cars that follow lanes and brake for each other, 22 pedestrians that wander and flee danger, damage smoke, explosions, and a live minimap.
 - **Fullscreen map** — hold `M` for a tactical overview: you, police, traffic, weapon pickups, and the mission marker.
@@ -48,9 +49,12 @@ Open http://localhost:3000 and click **START GAME**.
 | `Space` | Jump (on foot) / Handbrake (driving) |
 | `Shift` | Sprint |
 | `1–4` | Switch weapon (pistol / SMG / rifle / heavy) |
-| `R` | Toggle radio |
+| `R` / `T` | Radio on/off / next station |
 | `M` (hold) | Fullscreen map |
 | `Esc` / `P` | Pause |
+
+Walk up to any car — parked, traffic, even a cop cruiser — and press `F` to take it.
+On touch devices you get a virtual joystick plus Fire / Use / Jump / Brake buttons.
 
 ## Tech
 

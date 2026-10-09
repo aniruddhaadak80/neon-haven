@@ -21,7 +21,7 @@ export function MapOverlay({ gameRef }: { gameRef: React.MutableRefObject<MapApi
       gameRef.current.setBigMapCanvas(canvasRef.current)
     }
     return () => gameRef.current?.setBigMapCanvas(null)
-  }, [gameRef])
+  }, [gameRef, state.mapOpen])
 
   if (!state.mapOpen || state.phase !== 'playing') return null
 

@@ -81,6 +81,8 @@ export class Traffic {
       }
       // Store the lane center so the car stays in its lane.
       car.ai.lane = dir.di !== 0 ? sz : sx
+      // Roll out at cruising speed — Vehicle.update derives motion from vel.
+      car.vel.set(Math.sin(heading) * TRAFFIC.SPEED * 0.5, 0, Math.cos(heading) * TRAFFIC.SPEED * 0.5)
       car.speed = TRAFFIC.SPEED * 0.5
       this.scene.add(car.group)
       this.cars.push(car)

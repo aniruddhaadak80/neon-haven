@@ -14,11 +14,13 @@ export function Hud({ gameRef }: { gameRef: React.MutableRefObject<{ setMinimapC
 
   const minimapRef = useRef<HTMLCanvasElement>(null)
 
+  // Must re-run once the HUD actually renders (it returns null until playing).
   useEffect(() => {
     if (minimapRef.current && gameRef.current) {
       gameRef.current.setMinimapCanvas(minimapRef.current)
     }
-  }, [gameRef])
+    return () => gameRef.current?.setMinimapCanvas(null)
+  }, [gameRef, state.phase])
 
   if (state.phase === 'menu' || state.phase === 'loading') return null
 
