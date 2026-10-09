@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { WORLD } from '../config'
+import { WORLD, assetUrl } from '../config'
 
 const loader = new GLTFLoader()
 const gltfCache = new Map<string, THREE.Group>()
@@ -53,7 +53,7 @@ export function loadGLTF(url: string): Promise<THREE.Group> {
 export function getTexture(group: string): THREE.Texture {
   const hit = texCache.get(group)
   if (hit) return hit
-  const tex = new THREE.TextureLoader().load(`/models/tex/${group}-colormap.png`)
+  const tex = new THREE.TextureLoader().load(assetUrl(`/models/tex/${group}-colormap.png`))
   tex.colorSpace = THREE.SRGBColorSpace
   tex.anisotropy = 4
   texCache.set(group, tex)
@@ -76,7 +76,7 @@ const WHEEL_RE = /wheel/i
 
 /** Build a drivable vehicle model from a Kenney car GLB. */
 export async function getVehicleModel(key: string): Promise<VehicleModel> {
-  const root = await loadGLTF(`/models/cars/${key}.glb`)
+  const root = await loadGLTF(assetUrl(`/models/cars/${key}.glb`))
   root.updateMatrixWorld(true)
 
   const group = new THREE.Group()
@@ -150,7 +150,7 @@ export async function getStaticGeometry(group: string, name: string): Promise<TH
   const hit = staticCache.get(cacheKey)
   if (hit) return hit
 
-  const root = await loadGLTF(`/models/${group}/${name}.glb`)
+  const root = await loadGLTF(assetUrl(`/models/${group}/${name}.glb`))
   root.updateMatrixWorld(true)
   const geos: THREE.BufferGeometry[] = []
   root.traverse((o) => {
@@ -185,7 +185,7 @@ export async function getCharacter(key: string): Promise<CharacterRig> {
   }
   const gltf = await new Promise<{ scene: THREE.Group; clips: THREE.AnimationClip[] }>((resolve, reject) => {
     loader.load(
-      `/models/characters/${key}.glb`,
+      assetUrl(`/models/characters/${key}.glb`),
       (g) => resolve({ scene: g.scene, clips: g.animations }),
       undefined,
       (err) => reject(err instanceof Error ? err : new Error(String(err))),

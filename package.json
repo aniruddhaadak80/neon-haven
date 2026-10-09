@@ -10,6 +10,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "assets:fetch": "powershell -ExecutionPolicy Bypass -File scripts/fetch-assets.ps1",
+    "assets:prepare": "node scripts/prepare-models.mjs",
     "assets:inspect": "node scripts/inspect-glb.mjs"
   },
   "engines": {

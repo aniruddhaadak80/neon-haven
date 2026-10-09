@@ -99,13 +99,13 @@ export class GameAudio {
   }
 
   // --- One-shots ---
-  gunshot() {
+  gunshot(pitch = 1) {
     if (!this.ctx || !this.master) return
     const t = this.ctx.currentTime
     const osc = this.ctx.createOscillator()
     osc.type = 'square'
-    osc.frequency.setValueAtTime(180, t)
-    osc.frequency.exponentialRampToValueAtTime(40, t + 0.12)
+    osc.frequency.setValueAtTime(180 * pitch, t)
+    osc.frequency.exponentialRampToValueAtTime(40 * pitch, t + 0.12)
     const gain = this.ctx.createGain()
     gain.gain.setValueAtTime(0.5, t)
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15)
@@ -114,7 +114,7 @@ export class GameAudio {
     osc.start(t)
     osc.stop(t + 0.16)
     // Noise click.
-    this.noiseBurst(0.08, 0.35, 1200)
+    this.noiseBurst(0.08, 0.35, 1200 * pitch)
   }
 
   impact(strength = 1) {

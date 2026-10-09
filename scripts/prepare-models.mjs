@@ -3,8 +3,9 @@
 // What this does:
 //   1. Copies a curated set of GLB models into public/models/<group>/<name>.glb
 //      (clean, space-free URLs — the extracted pack folders are "GLB format").
-//   2. Rewrites each GLB's external texture URI to an absolute /models/tex/<...>.png
-//      path and copies the texture once per pack.
+//   2. Rewrites each GLB's external texture URI to a relative ../tex/<...>.png
+//      path (relative so the models work under any base path, e.g. GH Pages)
+//      and copies each texture once into public/models/tex/.
 //   3. Prints what it built so the game's manifest can be kept in sync.
 //
 // Source packs live in public/assets (created by `npm run assets:fetch`).
@@ -96,7 +97,7 @@ function rewriteGlb(srcPath, group, texDirOut) {
     const texName = `${group}-${basename(src)}`
     const dest = join(texDirOut, texName)
     writeFileSync(dest, readFileSync(src))
-    image.uri = `/models/tex/${texName}`
+    image.uri = `../tex/${texName}`
   }
 
   const jsonOut = Buffer.from(JSON.stringify(gltf), 'utf8')

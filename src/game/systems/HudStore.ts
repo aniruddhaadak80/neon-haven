@@ -26,6 +26,10 @@ export interface HudState {
   damageFlash: number
   /** True while the map overlay is open. */
   mapOpen: boolean
+  /** Currently equipped weapon id. */
+  weapon: string
+  /** Owned weapon ids. */
+  weapons: string[]
   save: SaveData
 }
 
@@ -51,6 +55,8 @@ class HudStore {
     loadLabel: '',
     damageFlash: 0,
     mapOpen: false,
+    weapon: 'pistol',
+    weapons: ['pistol'],
     save: {
       money: 0, xp: 0, level: 1,
       stats: { distance: 0, crimes: 0, jobs: 0, carsDestroyed: 0, pedsHit: 0 },

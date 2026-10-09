@@ -98,6 +98,10 @@ export class Input {
     if (e.code === 'KeyF') { this.state.interact = true; this.edge.add('interact') }
     if (e.code === 'KeyR') { this.state.radio = true; this.edge.add('radio') }
     if (e.code === 'KeyV') { this.state.camera = true; this.edge.add('camera') }
+    if (e.code === 'Digit1') this.edge.add('weapon1')
+    if (e.code === 'Digit2') this.edge.add('weapon2')
+    if (e.code === 'Digit3') this.edge.add('weapon3')
+    if (e.code === 'Digit4') this.edge.add('weapon4')
     if (e.code === 'KeyM') { this.state.map = true; this.edge.add('map'); this.onMap?.(true) }
     if (e.code === 'Escape' || e.code === 'KeyP') { this.edge.add('pause'); this.onPause?.() }
     if (e.code === 'Space') { this.state.jump = true; this.edge.add('jump') }

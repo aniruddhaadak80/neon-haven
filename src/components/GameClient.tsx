@@ -6,22 +6,31 @@ import { hud } from '../game/systems/HudStore'
 import { Hud } from './Hud'
 import { StartScreen } from './StartScreen'
 import { PauseMenu } from './PauseMenu'
+import { MapOverlay } from './MapOverlay'
+
+interface GameApi {
+  setMinimapCanvas: (c: HTMLCanvasElement | null) => void
+  setBigMapCanvas: (c: HTMLCanvasElement | null) => void
+}
 
 export default function GameClient() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gameRef = useRef<Game | null>(null)
   const minimapGameRef = useRef<{ setMinimapCanvas: (c: HTMLCanvasElement | null) => void } | null>(null)
+  const mapApiRef = useRef<GameApi | null>(null)
 
   useEffect(() => {
     if (!canvasRef.current) return
     const game = new Game(canvasRef.current)
     gameRef.current = game
     minimapGameRef.current = game as unknown as { setMinimapCanvas: (c: HTMLCanvasElement | null) => void }
+    mapApiRef.current = game as unknown as GameApi
 
     return () => {
       game.dispose()
       gameRef.current = null
       minimapGameRef.current = null
+      mapApiRef.current = null
     }
   }, [])
 
@@ -44,6 +53,7 @@ export default function GameClient() {
     <>
       <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0 }} />
       <Hud gameRef={minimapGameRef} />
+      <MapOverlay gameRef={mapApiRef} />
       <StartScreen onStart={handleStart} />
       <PauseMenu onResume={handleResume} onQuit={handleQuit} />
     </>

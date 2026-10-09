@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { WORLD, PLAYER, CAR, PEDS, POLICE, RENDER, CAMERA, SAVE_KEY, WANTED } from './config'
+import { WORLD, PLAYER, CAR, PEDS, POLICE, RENDER, CAMERA, SAVE_KEY, WANTED, WEAPONS, WEAPON_ORDER, PICKUPS } from './config'
 import { Input } from './input'
 import { buildCity, resolveCollision, isBlocked, type CityData } from './world/City'
 import { Player, createPlayer } from './entities/Player'
@@ -13,7 +13,7 @@ import { Police } from './systems/Police'
 import { WantedSystem } from './systems/Wanted'
 import { MissionSystem } from './systems/Missions'
 import { hud } from './systems/HudStore'
-import { getVehicleModel, TRAFFIC_MODELS, CHARACTER_KEYS } from './assets/AssetLibrary'
+import { getVehicleModel, TRAFFIC_MODELS, CHARACTER_KEYS, getStaticGeometry, getTexture } from './assets/AssetLibrary'
 import { clamp, damp, damp as dampN, dist2D, formatDist } from './utils'
 import type { Vehicle, SaveData } from './types'
 
@@ -49,7 +49,12 @@ export class Game {
   private stats = { distance: 0, crimes: 0, jobs: 0, carsDestroyed: 0, pedsHit: 0 }
   private bestWanted = 0
   private minimapCanvas: HTMLCanvasElement | null = null
+  private bigMapCanvas: HTMLCanvasElement | null = null
   private minimapTimer = 0
+  /** Owned weapon ids. Pistol is always owned. */
+  private ownedWeapons: string[] = ['pistol']
+  private weapon = 'pistol'
+  private pickups: { group: THREE.Group; ring: THREE.Mesh; pos: THREE.Vector3; weapon: string; active: boolean; respawn: number; phase: number }[] = []
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
@@ -157,7 +162,41 @@ export class Game {
       this.scene.add(car.group)
     }
 
+    // Weapon pickups scattered through the city
+    hud.set({ loadFrac: 0.96, loadLabel: 'hiding weapons' })
+    await this.spawnPickups()
+
     hud.set({ loadFrac: 1, loadLabel: 'done' })
+  }
+
+  private async spawnPickups() {
+    const defs = Object.values(WEAPONS).filter((w) => w.pickupModel)
+    // 2 of each pickup weapon, spread across the map
+    const queue: string[] = []
+    for (const d of defs) queue.push(d.id, d.id)
+    const blasterTex = getTexture('blaster')
+    for (let i = 0; i < PICKUPS.COUNT && i < queue.length * 3; i++) {
+      const weapon = queue[i % queue.length]!
+      const def = WEAPONS[weapon]!
+      const geo = await getStaticGeometry('blaster', def.pickupModel!)
+      const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: blasterTex }))
+      mesh.scale.setScalar(1.4)
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.5, 0.65, 24),
+        new THREE.MeshBasicMaterial({ color: def.tracer, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }),
+      )
+      ring.rotation.x = -Math.PI / 2
+      ring.position.y = 0.05
+      const group = new THREE.Group()
+      mesh.position.y = 0.8
+      // Blasters point along +z natively; lay flat for display
+      mesh.rotation.x = -Math.PI / 2 + 0.4
+      group.add(mesh, ring)
+      const pos = this.randomSidewalkPos(this.city!.spawn, 12, 70)
+      group.position.copy(pos)
+      this.scene.add(group)
+      this.pickups.push({ group, ring, pos, weapon, active: true, respawn: 0, phase: Math.random() * Math.PI * 2 })
+    }
   }
 
   private randomSidewalkPos(center: THREE.Vector3, minD: number, maxD: number): THREE.Vector3 {
@@ -217,6 +256,22 @@ export class Game {
       this.updateOnFoot(dt)
     }
 
+    // --- Weapon switching (1-4) ---
+    for (let i = 0; i < WEAPON_ORDER.length; i++) {
+      if (this.input.consume(`weapon${i + 1}`)) {
+        const id = WEAPON_ORDER[i]!
+        if (this.ownedWeapons.includes(id)) {
+          this.weapon = id
+          hud.toast(`${WEAPONS[id]!.name} equipped`, 'info')
+        } else {
+          hud.toast(`Find the ${WEAPONS[id]!.name} pickup first`, 'info')
+        }
+      }
+    }
+
+    // --- Pickups ---
+    this.updatePickups(dt)
+
     // --- Camera ---
     this.updateCamera(dt)
 
@@ -254,11 +309,12 @@ export class Game {
     this.updateHud(dt)
     this.input.endFrame()
 
-    // --- Minimap (throttled) ---
+    // --- Minimap + fullscreen map (throttled) ---
     this.minimapTimer -= dt
     if (this.minimapTimer <= 0) {
       this.minimapTimer = 0.1
       this.drawMinimap()
+      if (hud.state.mapOpen) this.drawBigMap()
     }
 
     // --- Persist occasionally ---
@@ -289,7 +345,7 @@ export class Game {
 
     // Shoot
     if ((input.shoot || (input.touch.active && input.touch.fire)) && this.player.shootTimer <= 0) {
-      this.player.shootTimer = PLAYER.SHOOT_COOLDOWN
+      this.player.shootTimer = WEAPONS[this.weapon]!.cooldown
       this.shootFromPlayer()
     }
     this.player.shootTimer = Math.max(0, this.player.shootTimer - dt)
@@ -368,7 +424,7 @@ export class Game {
 
     // Drive-by shooting
     if ((input.shoot || (input.touch.active && input.touch.fire)) && this.player.shootTimer <= 0) {
-      this.player.shootTimer = PLAYER.SHOOT_COOLDOWN
+      this.player.shootTimer = WEAPONS[this.weapon]!.cooldown
       this.shootFromPlayer()
     }
     this.player.shootTimer = Math.max(0, this.player.shootTimer - dt)
@@ -527,17 +583,58 @@ export class Game {
     }, 8000)
   }
 
+  // --- Weapon pickups ---
+  private updatePickups(dt: number) {
+    const now = performance.now() / 1000
+    for (const p of this.pickups) {
+      if (!p.active) {
+        p.respawn -= dt
+        if (p.respawn <= 0) {
+          p.active = true
+          p.group.visible = true
+        }
+        continue
+      }
+      // Float + spin
+      p.group.rotation.y += dt * 1.5
+      p.group.position.y = Math.sin(now * 2 + p.phase) * 0.12
+      const s = 1 + Math.sin(now * 3 + p.phase) * 0.08
+      p.ring.scale.setScalar(s)
+
+      // Collect on foot
+      if (!this.player.isDriving && !this.player.dead) {
+        if (dist2D(p.pos.x, p.pos.z, this.player.pos.x, this.player.pos.z) < PICKUPS.PICKUP_DIST) {
+          p.active = false
+          p.respawn = PICKUPS.RESPAWN_TIME
+          p.group.visible = false
+          if (!this.ownedWeapons.includes(p.weapon)) {
+            this.ownedWeapons.push(p.weapon)
+          }
+          this.weapon = p.weapon
+          const def = WEAPONS[p.weapon]!
+          hud.toast(`${def.name} picked up — press ${WEAPON_ORDER.indexOf(p.weapon as (typeof WEAPON_ORDER)[number]) + 1} to switch`, 'good')
+          this.particles.burst(this.player.pos.clone().setY(1), 14, def.tracer, 4, 0.6, 1, 4, 0.8)
+        }
+      }
+    }
+  }
+
   // --- Shooting ---
   private shootFromPlayer() {
-    this.audio.gunshot()
+    const def = WEAPONS[this.weapon]!
+    this.audio.gunshot(def.pitch)
     this.wanted.addCrime(WANTED.SHOOT)
     this.stats.crimes++
-    this.camShake = Math.min(1, this.camShake + 0.15)
+    this.camShake = Math.min(1, this.camShake + def.shake)
 
     // Raycast from camera through crosshair
     const ray = new THREE.Raycaster()
     ray.setFromCamera(new THREE.Vector2(0, 0), this.camera)
-    ray.far = PLAYER.SHOOT_RANGE
+    ray.far = def.range
+
+    // Muzzle flash + tracer spark at the player
+    const origin = this.player.pos.clone().setY(1.3)
+    this.particles.burst(origin, 3, def.tracer, 2, 0.15, 0.8, 0, 0.5)
 
     const targets: THREE.Object3D[] = []
     for (const p of this.peds) targets.push(p.group)
@@ -547,7 +644,7 @@ export class Game {
     const hits = ray.intersectObjects(targets, true)
     if (hits.length > 0) {
       const hit = hits[0]!
-      this.particles.sparks(hit.point, 6)
+      this.particles.burst(hit.point, 6, def.tracer, 5, 0.4, 0.8, 10, 0.4)
       // Find what was hit
       let obj: THREE.Object3D | null = hit.object
       while (obj) {
@@ -564,7 +661,7 @@ export class Game {
         }
         const car = [...this.vehicles, ...this.traffic.cars, ...this.police.cars].find((v) => v.group === obj)
         if (car) {
-          const destroyed = car.damageBy(PLAYER.SHOOT_DAMAGE)
+          const destroyed = car.damageBy(def.damage)
           if (destroyed) {
             this.onCarDestroyed(car)
             this.wanted.addCrime(WANTED.DESTROY_CAR)
@@ -602,6 +699,8 @@ export class Game {
       mission: mission ? { ...mission, dist } : null,
       radioOn: this.audio.radioOn,
       radioStation: this.audio.radioStation,
+      weapon: this.weapon,
+      weapons: [...this.ownedWeapons],
       save: this.save,
     })
     hud.set({ damageFlash: damp(hud.state.damageFlash, 0, 5, dt) })
@@ -649,13 +748,26 @@ export class Game {
     this.minimapCanvas = canvas
   }
 
+  setBigMapCanvas(canvas: HTMLCanvasElement | null) {
+    this.bigMapCanvas = canvas
+  }
+
   private drawMinimap() {
-    const canvas = this.minimapCanvas
+    if (this.minimapCanvas) this.drawMap(this.minimapCanvas, false)
+  }
+
+  private drawBigMap() {
+    if (this.bigMapCanvas) this.drawMap(this.bigMapCanvas, true)
+  }
+
+  /** Shared 2D city renderer: small `big=false` for the HUD corner, large for the M overlay. */
+  private drawMap(canvas: HTMLCanvasElement, big: boolean) {
     const city = this.city
-    if (!canvas || !city) return
+    if (!city) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     const S = canvas.width
+    const u = S / 200 // scale unit: minimap is 200px
     const scale = S / (city.size * 1.15)
     const toMap = (x: number, z: number): [number, number] => [
       (x - city.origin) * scale + S / 2,
@@ -663,12 +775,12 @@ export class Game {
     ]
 
     ctx.clearRect(0, 0, S, S)
-    ctx.fillStyle = 'rgba(8, 8, 16, 0.9)'
+    ctx.fillStyle = 'rgba(8, 8, 16, 0.92)'
     ctx.fillRect(0, 0, S, S)
 
     // Streets
     ctx.strokeStyle = 'rgba(120, 130, 160, 0.5)'
-    ctx.lineWidth = 2
+    ctx.lineWidth = Math.max(1, 2 * u)
     for (const x of city.streetsX) {
       const [mx] = toMap(x, 0)
       ctx.beginPath()
@@ -684,18 +796,26 @@ export class Game {
       ctx.stroke()
     }
 
+    // Weapon pickups
+    for (const p of this.pickups) {
+      if (!p.active) continue
+      const [mx, mz] = toMap(p.pos.x, p.pos.z)
+      ctx.fillStyle = '#ffea00'
+      ctx.fillRect(mx - 2 * u, mz - 2 * u, 4 * u, 4 * u)
+    }
+
     // Mission marker
     const m = this.missions.current
     if (m) {
       const [mx, mz] = toMap(m.marker.x, m.marker.z)
       ctx.fillStyle = '#00ff88'
       ctx.beginPath()
-      ctx.arc(mx, mz, 5, 0, Math.PI * 2)
+      ctx.arc(mx, mz, 5 * u, 0, Math.PI * 2)
       ctx.fill()
       ctx.strokeStyle = 'rgba(0, 255, 136, 0.4)'
-      ctx.lineWidth = 2
+      ctx.lineWidth = 2 * u
       ctx.beginPath()
-      ctx.arc(mx, mz, 9 + Math.sin(performance.now() * 0.006) * 3, 0, Math.PI * 2)
+      ctx.arc(mx, mz, (9 + Math.sin(performance.now() * 0.006) * 3) * u, 0, Math.PI * 2)
       ctx.stroke()
     }
 
@@ -703,7 +823,7 @@ export class Game {
     ctx.fillStyle = 'rgba(255, 200, 80, 0.7)'
     for (const c of this.traffic.cars) {
       const [mx, mz] = toMap(c.pos.x, c.pos.z)
-      ctx.fillRect(mx - 1.5, mz - 1.5, 3, 3)
+      ctx.fillRect(mx - 1.5 * u, mz - 1.5 * u, 3 * u, 3 * u)
     }
 
     // Police
@@ -711,7 +831,7 @@ export class Game {
     for (const c of this.police.cars) {
       const [mx, mz] = toMap(c.pos.x, c.pos.z)
       ctx.beginPath()
-      ctx.arc(mx, mz, 3, 0, Math.PI * 2)
+      ctx.arc(mx, mz, 3 * u, 0, Math.PI * 2)
       ctx.fill()
     }
 
@@ -722,12 +842,19 @@ export class Game {
     ctx.rotate(Math.atan2(Math.sin(this.player.heading), Math.cos(this.player.heading)) * -1 + Math.PI)
     ctx.fillStyle = '#00e5ff'
     ctx.beginPath()
-    ctx.moveTo(0, -6)
-    ctx.lineTo(4, 5)
-    ctx.lineTo(-4, 5)
+    ctx.moveTo(0, -6 * u)
+    ctx.lineTo(4 * u, 5 * u)
+    ctx.lineTo(-4 * u, 5 * u)
     ctx.closePath()
     ctx.fill()
     ctx.restore()
+
+    if (big) {
+      // Legend
+      ctx.fillStyle = 'rgba(255,255,255,0.75)'
+      ctx.font = `${13 * u}px sans-serif`
+      ctx.fillText('▲ you   ● police   ■ traffic   ■ weapon pickup   ● mission', 12 * u, S - 12 * u)
+    }
 
     // Border
     ctx.strokeStyle = 'rgba(255,255,255,0.15)'

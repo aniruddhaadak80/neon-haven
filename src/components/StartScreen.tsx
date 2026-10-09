@@ -39,7 +39,8 @@ export function StartScreen({ onStart }: { onStart: () => void }) {
             <span className="key">SPACE</span><span>Jump / Handbrake</span>
             <span className="key">SHIFT</span><span>Sprint</span>
             <span className="key">R</span><span>Radio on/off</span>
-            <span className="key">M</span><span>Map</span>
+            <span className="key">M</span><span>Fullscreen map</span>
+            <span className="key">1–4</span><span>Switch weapon</span>
             <span className="key">ESC</span><span>Pause</span>
           </div>
           <div style={{ marginTop: 24, fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>

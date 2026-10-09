@@ -1,12 +1,22 @@
+<div align="center">
+
 # NEON HAVEN
 
-An open-world, GTA-style crime sandbox that runs entirely in your browser. Drive through a neon-lit city, complete missions, outrun the law, and cause chaos — all rendered in real-time 3D with Three.js.
+### An open-world, GTA-style crime sandbox that runs entirely in your browser.
 
-![Engine](https://img.shields.io/badge/Three.js-0.181-black) ![Next.js](https://img.shields.io/badge/Next.js-15.5-000) ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue)
+**[🎮 Play on Vercel](https://neon-haven.vercel.app)** · **[🎮 Play on GitHub Pages](https://aniruddhaadak80.github.io/neon-haven)** · [Source](https://github.com/aniruddhaadak80/neon-haven) · [Issues](https://github.com/aniruddhaadak80/neon-haven/issues)
 
-## Play
+![Engine](https://img.shields.io/badge/Three.js-0.181-black?style=flat-square) ![Next.js](https://img.shields.io/badge/Next.js-15.5-000?style=flat-square) ![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square) ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178c6?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-f0b429?style=flat-square) ![Pages](https://img.shields.io/github/deployments/aniruddhaadak80/neon-haven/github-pages?label=pages&style=flat-square)
+
+</div>
+
+---
+
+Drive through a neon-lit city, complete missions, outrun the law, and cause chaos — all rendered in real-time 3D with Three.js. No install, no account, no downloads beyond the page itself.
 
 ```bash
+git clone https://github.com/aniruddhaadak80/neon-haven.git
+cd neon-haven
 npm install
 npm run dev
 ```
@@ -15,15 +25,17 @@ Open http://localhost:3000 and click **START GAME**.
 
 ## Features
 
-- **Open-world city** — a procedurally generated downtown with districts (skyscrapers, suburbs, industrial, parks), traffic lights, street lights, neon signs, and a full day/night cycle.
-- **Drivable vehicles** — 19 car models with arcade physics: acceleration, braking, drifting (handbrake), and collisions. Enter/exit any car with `F`.
+- **Open-world city** — procedurally generated downtown with districts (skyscrapers, suburbs, industrial, parks), traffic lights, street lights, neon signs, and a full day/night cycle with a shader sky dome. The same seed always builds the same city.
+- **Drivable vehicles** — 19 car models with custom arcade physics: acceleration, braking, drifting (handbrake), body roll, spinning/steering wheels, and collisions. Enter/exit any car with `F`.
 - **On-foot mode** — walk, sprint, jump, and shoot with a third-person camera and pointer-lock mouse look.
-- **Wanted system** — commit crimes (hit pedestrians, ram cars, shoot) and the police heat rises through 5 stars. Police cars chase, ram, and shoot. Escape by staying out of sight.
-- **Missions** — procedurally generated courier, rampage, getaway, and taxi jobs with timers and cash rewards.
-- **Pedestrians & traffic** — 22 pedestrians who wander and flee, 16 AI traffic cars that follow streets and stop for each other.
+- **Weapon pickups** — floating blasters hidden through the city: SMG, Rifle, and Heavy, each with its own damage, fire rate, tracer color, and gunshot pitch. Switch with `1–4`.
+- **Wanted system** — commit crimes (hit pedestrians, ram cars, shoot) and police heat rises through 5 stars. Police cars chase, ram, and shoot back. Escape by staying out of sight to drop stars.
+- **Missions** — procedurally generated courier, rampage, getaway, and taxi jobs with timers, map markers, and cash rewards.
+- **Living world** — 16 AI traffic cars that follow lanes and brake for each other, 22 pedestrians that wander and flee danger, damage smoke, explosions, and a live minimap.
+- **Fullscreen map** — hold `M` for a tactical overview: you, police, traffic, weapon pickups, and the mission marker.
 - **Progression** — earn cash and XP, level up, and persist your save in `localStorage`.
-- **Procedural audio** — engine, sirens, gunfire, explosions, and a synth radio, all synthesized with WebAudio. No audio files.
-- **Minimap & HUD** — live minimap, speedometer, health/armor, wanted stars, mission tracker, and toasts.
+- **Procedural audio** — engine that revs with speed, two-tone police siren, gunfire, explosions, and a 3-station synth radio — all synthesized with WebAudio. Zero audio files.
+- **HUD** — live minimap, speedometer, health/armor bars, wanted stars, weapon pips, mission tracker, and toasts.
 
 ## Controls
 
@@ -35,43 +47,58 @@ Open http://localhost:3000 and click **START GAME**.
 | `F` | Enter / Exit car |
 | `Space` | Jump (on foot) / Handbrake (driving) |
 | `Shift` | Sprint |
+| `1–4` | Switch weapon (pistol / SMG / rifle / heavy) |
 | `R` | Toggle radio |
-| `M` | Full map |
+| `M` (hold) | Fullscreen map |
 | `Esc` / `P` | Pause |
 
 ## Tech
 
 - **Next.js 15** (App Router) + **React 19** + **TypeScript** (strict)
-- **Three.js** for rendering — merged-geometry city (a handful of draw calls), pooled particles, shader sky dome
-- **Kenney** asset packs (CC0) for all models — cars, city kits, characters, weapons, nature
-- No physics engine — custom arcade vehicle physics and grid-based collision
+- **Three.js** — the whole city merges into a handful of draw calls; pooled point-sprite particles; shader sky dome
+- **Kenney** asset packs (CC0) for every model — cars, city kits, characters, weapons, nature
+- No physics engine — custom arcade vehicle physics plus grid-based collision
+- Deployed to **Vercel** (server build) and **GitHub Pages** (static export under `/neon-haven` via `NEXT_PUBLIC_BASE_PATH` + relative GLB texture URIs — see `.github/workflows/pages.yml`)
 
 ## Project structure
 
 ```
 src/
   app/            # Next.js routes + global styles
-  components/     # React HUD, menus, minimap
+  components/     # React HUD, menus, minimap, fullscreen map
   game/
-    Game.ts           # orchestrator: scene, loop, camera, systems
-    config.ts         # all gameplay tunables
-    input.ts          # keyboard/mouse/pointer-lock
+    Game.ts           # orchestrator: scene, loop, camera, pickups, maps
+    config.ts         # all gameplay tunables + weapon defs + assetUrl()
+    input.ts          # keyboard/mouse/pointer-lock (+ weapon hotkeys)
     assets/           # GLB loading, vehicle/character factories
     world/City.ts     # procedural city generation + collision
     entities/         # Vehicle, Player, Ped
     systems/          # Traffic, Police, Wanted, Missions, DayNight, Audio, Particles
 public/
-  models/         # prepared GLBs (generated by scripts/prepare-models.mjs)
+  models/         # prepared GLBs (regenerated by scripts/prepare-models.mjs)
 scripts/
   fetch-assets.ps1    # download Kenney packs
-  prepare-models.mjs  # rewrite GLBs into clean paths
+  prepare-models.mjs  # rewrite GLBs into clean paths + relative texture URIs
+.github/
+  workflows/pages.yml # static-export build + GitHub Pages deploy
 ```
+
+## Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Local dev server |
+| `npm run build` | Production build (Vercel layout) |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm run assets:fetch` | Download Kenney packs into `public/assets/` |
+| `npm run assets:prepare` | Rebuild `public/models/` from the packs |
 
 ## Assets
 
 All third-party art is from [Kenney](https://kenney.nl) and is licensed **CC0 1.0** (public domain). See [ATTRIBUTION.md](ATTRIBUTION.md).
 
-The Kenney packs are downloaded by `scripts/fetch-assets.ps1` into `public/assets/`, then `scripts/prepare-models.mjs` rewrites a curated subset into `public/models/` with clean, space-free URLs. To regenerate:
+The Kenney packs are downloaded by `scripts/fetch-assets.ps1` into `public/assets/` (git-ignored), then `scripts/prepare-models.mjs` rewrites a curated subset into `public/models/` with clean, space-free URLs and relative texture paths. To regenerate:
 
 ```bash
 npm run assets:fetch
@@ -80,4 +107,4 @@ npm run assets:prepare
 
 ## License
 
-MIT for the code. Game assets are CC0 (Kenney). See [ATTRIBUTION.md](ATTRIBUTION.md).
+[MIT](LICENSE) for the code. Game assets are CC0 (Kenney). See [ATTRIBUTION.md](ATTRIBUTION.md).

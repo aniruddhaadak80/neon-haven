@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore, useRef, useEffect } from 'react'
 import { hud } from '../game/systems/HudStore'
+import { WEAPONS, WEAPON_ORDER } from '../game/config'
 import { Minimap } from './Minimap'
 
 export function Hud({ gameRef }: { gameRef: React.MutableRefObject<{ setMinimapCanvas: (c: HTMLCanvasElement | null) => void } | null> }) {
@@ -75,13 +76,27 @@ export function Hud({ gameRef }: { gameRef: React.MutableRefObject<{ setMinimapC
         <Minimap ref={minimapRef} />
       </div>
 
-      {/* Bottom-right: speed + health */}
+      {/* Bottom-right: speed + health + weapon */}
       <div className="hud-bottom-right">
         {state.inCar && (
           <>
             <div className="speedo">{Math.round(state.speedKmh)}</div>
             <div className="speedo-unit">KM/H</div>
           </>
+        )}
+        {!state.inCar && (
+          <div className="weapon-tag">
+            {WEAPON_ORDER.map((id, i) => (
+              <span
+                key={id}
+                className={`weapon-pip ${state.weapons.includes(id) ? 'owned' : ''} ${state.weapon === id ? 'active' : ''}`}
+                title={WEAPONS[id]!.name}
+              >
+                {i + 1}
+              </span>
+            ))}
+            <span className="weapon-name">{WEAPONS[state.weapon]?.name ?? state.weapon}</span>
+          </div>
         )}
         <div style={{ marginTop: 10 }}>
           <div className="health-bar">
