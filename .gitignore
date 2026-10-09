@@ -1,6 +1,8 @@
 node_modules/
 .next/
 out/
+.devserver.log
+.devserver.err.log
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
