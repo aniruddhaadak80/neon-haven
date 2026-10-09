@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.env*.local
+
+# Downloaded asset packs (regenerate with npm run assets:fetch)
+public/assets/
+
+# OS
+.DS_Store
+Thumbs.db
