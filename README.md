@@ -4,7 +4,7 @@
 
 ### An open-world, GTA-style crime sandbox that runs entirely in your browser.
 
-**[🎮 Play on Vercel](https://neon-haven.vercel.app)** · **[🎮 Play on GitHub Pages](https://aniruddhaadak80.github.io/neon-haven)** · [Source](https://github.com/aniruddhaadak80/neon-haven) · [Issues](https://github.com/aniruddhaadak80/neon-haven/issues)
+**[🎮 Play on Vercel](https://neon-haven-two.vercel.app)** · **[🎮 Play on GitHub Pages](https://aniruddhaadak80.github.io/neon-haven)** · [Source](https://github.com/aniruddhaadak80/neon-haven) · [Issues](https://github.com/aniruddhaadak80/neon-haven/issues)
 
 ![Engine](https://img.shields.io/badge/Three.js-0.181-black?style=flat-square) ![Next.js](https://img.shields.io/badge/Next.js-15.5-000?style=flat-square) ![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square) ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178c6?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-f0b429?style=flat-square) ![Pages](https://img.shields.io/github/deployments/aniruddhaadak80/neon-haven/github-pages?label=pages&style=flat-square)
 
