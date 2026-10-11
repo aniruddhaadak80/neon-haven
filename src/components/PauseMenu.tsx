@@ -25,11 +25,12 @@ export function PauseMenu({ onResume, onQuit }: { onResume: () => void; onQuit: 
       </div>
       <div className="controls-grid" style={{ marginTop: 32 }}>
         <span className="key">W A S D</span><span>Move / Drive</span>
-        <span className="key">LMB</span><span>Shoot</span>
+        <span className="key">LMB / E</span><span>Shoot / Melee</span>
         <span className="key">F</span><span>Enter / Exit car</span>
         <span className="key">SPACE</span><span>Jump / Handbrake</span>
-        <span className="key">R</span><span>Radio</span>
-        <span className="key">M</span><span>Map</span>
+        <span className="key">1–4</span><span>Weapons</span>
+        <span className="key">R / T</span><span>Radio / Station</span>
+        <span className="key">M / K</span><span>Map / Stats</span>
       </div>
     </div>
   )

@@ -221,6 +221,52 @@ canvas {
   transform: translateY(-50%);
 }
 
+.hitmarker {
+  font-size: 26px;
+  font-weight: 900;
+  color: #ffea00;
+  text-shadow: 0 0 10px rgba(255, 234, 0, 0.8), 0 0 3px rgba(0, 0, 0, 0.9);
+  animation: hitPop 0.18s ease-out;
+}
+
+@keyframes hitPop {
+  from { transform: translate(-50%, -50%) scale(1.6); opacity: 1; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
+}
+
+/* Stats overlay */
+.stats-card {
+  min-width: 320px;
+  padding: 24px 28px;
+  border-radius: 14px;
+  background: rgba(10, 10, 18, 0.92);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  backdrop-filter: blur(6px);
+}
+
+.stats-title {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: var(--neon-cyan);
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 30px;
+  padding: 5px 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.65);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.stats-row b {
+  color: #fff;
+}
+
 .toast {
   padding: 8px 16px;
   border-radius: 8px;

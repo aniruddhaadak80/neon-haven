@@ -31,7 +31,8 @@ Open http://localhost:3000 and click **START GAME**.
 - **Weapon pickups** — floating blasters hidden through the city: SMG, Rifle, and Heavy, each with its own damage, fire rate, tracer color, and gunshot pitch. Switch with `1–4`. Blue armor shards give +50 armor.
 - **Wanted system** — commit crimes (hit pedestrians, ram cars, shoot, steal cars) and police heat rises through 5 stars. Police cars chase, ram, and shoot back — gunfire chews up your car first, then you. Getaway driving matters: escape by staying out of sight to drop stars.
 - **Death matters** — get killed and you wake up at the hospital minus 10% cash, heat cleared, mission dropped.
-- **Missions** — procedurally generated courier, rampage, getaway, and taxi jobs with timers, map markers, and cash rewards.
+- **Missions** — seven procedurally generated job types: courier, rampage, getaway, taxi, checkpoint street races, assassinations with a living marked target, and multi-package stash runs — all with timers, map markers, and cash rewards.
+- **Melee combat** — punch and kick up close (`E`) with dedicated swing animations, hitmarkers, and kill streaks that pay bonus XP.
 - **Living world** — 16 AI traffic cars that follow lanes and brake for each other, 22 pedestrians that wander and flee danger, damage smoke, explosions, and a live minimap.
 - **Fullscreen map** — hold `M` for a tactical overview: you, police, traffic, weapon pickups, and the mission marker.
 - **Progression** — earn cash and XP, level up, and persist your save in `localStorage`.
@@ -44,13 +45,13 @@ Open http://localhost:3000 and click **START GAME**.
 | --- | --- |
 | `W A S D` | Move / Drive |
 | Mouse | Look / Aim |
-| `LMB` | Shoot |
-| `F` | Enter / Exit car |
+| `LMB` / `E` | Shoot / Melee |
+| `F` | Enter / Exit car (steal anything — parked, traffic, cop cruisers) |
 | `Space` | Jump (on foot) / Handbrake (driving) |
 | `Shift` | Sprint |
 | `1–4` | Switch weapon (pistol / SMG / rifle / heavy) |
 | `R` / `T` | Radio on/off / next station |
-| `M` (hold) | Fullscreen map |
+| `M` (hold) / `K` (hold) | Fullscreen map / Career stats |
 | `Esc` / `P` | Pause |
 
 Walk up to any car — parked, traffic, even a cop cruiser — and press `F` to take it.

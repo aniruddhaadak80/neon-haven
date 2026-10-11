@@ -26,6 +26,8 @@ export class Player {
   private action: THREE.AnimationAction | null = null
   private actionName = ''
   private bobPhase = 0
+  /** One-shot animation (melee) that suppresses the locomotion picker. */
+  private overrideUntil = 0
 
   constructor(rig: CharacterRig) {
     this.rig = rig
@@ -54,6 +56,13 @@ export class Player {
     next.play()
     this.action = next
     this.actionName = name
+  }
+
+  /** Play a one-shot (e.g. melee swing) that wins over locomotion for `dur` seconds. */
+  playOverride(name: string, dur: number) {
+    this.overrideUntil = performance.now() / 1000 + dur
+    this.actionName = '' // force the switch even if it matches
+    this.play(name, 0.08)
   }
 
   /** On-foot update. input: {forward,back,left,right,sprint,jump} */
@@ -117,7 +126,9 @@ export class Player {
     }
 
     // Animation.
-    if (this.shootTimer > 0) {
+    if (performance.now() / 1000 < this.overrideUntil) {
+      // One-shot (melee swing) keeps playing.
+    } else if (this.shootTimer > 0) {
       this.play('holding-right-shoot', 0.05)
       this.shootTimer -= dt
     } else if (!this.grounded) {

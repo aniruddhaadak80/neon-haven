@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { WORLD, PLAYER, CAR, PEDS, POLICE, RENDER, CAMERA, SAVE_KEY, WANTED, WEAPONS, WEAPON_ORDER, PICKUPS } from './config'
+import { WORLD, PLAYER, CAR, PEDS, POLICE, RENDER, CAMERA, SAVE_KEY, WANTED, WEAPONS, WEAPON_ORDER, PICKUPS, MELEE, STREAK } from './config'
 import { Input } from './input'
 import { buildCity, resolveCollision, isBlocked, type CityData } from './world/City'
 import { Player, createPlayer } from './entities/Player'
@@ -16,6 +16,15 @@ import { hud } from './systems/HudStore'
 import { getVehicleModel, TRAFFIC_MODELS, CHARACTER_KEYS, getStaticGeometry, getTexture } from './assets/AssetLibrary'
 import { clamp, damp, dist2D, formatDist } from './utils'
 import type { Vehicle, SaveData } from './types'
+
+interface Shard {
+  group: THREE.Group
+  pos: THREE.Vector3
+  active: boolean
+  respawn: number
+  phase: number
+  kind: 'armor' | 'health'
+}
 
 export class Game {
   private renderer: THREE.WebGLRenderer
@@ -55,7 +64,12 @@ export class Game {
   private ownedWeapons: string[] = ['pistol']
   private weapon = 'pistol'
   private pickups: { group: THREE.Group; ring: THREE.Mesh; pos: THREE.Vector3; weapon: string; active: boolean; respawn: number; phase: number }[] = []
-  private armorPickups: { group: THREE.Group; pos: THREE.Vector3; active: boolean; respawn: number; phase: number }[] = []
+  private armorPickups: Shard[] = []
+  private healthPickups: Shard[] = []
+  /** Kill-streak state for XP bonuses. */
+  private streak = 0
+  private streakTimer = 0
+  private meleeTimer = 0
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
@@ -79,6 +93,9 @@ export class Game {
     }
     this.input.onMap = (down) => {
       hud.set({ mapOpen: down })
+    }
+    this.input.onStats = (down) => {
+      hud.set({ statsOpen: down })
     }
 
     window.addEventListener('resize', this.onResize)
@@ -329,6 +346,21 @@ export class Game {
       const offered = this.missions.maybeOffer(dt, this.player.pos, this.wanted.level)
       if (offered) {
         hud.toast(`New job: ${offered.title} — $${offered.reward}`, 'info')
+        if (offered.kind === 'hit') {
+          // The mark gets a real pedestrian wandering near the marker.
+          createPed(offered.marker.x + 2, offered.marker.z + 2).then((target) => {
+            if (this.disposed) return
+            // Still the same mission? Otherwise discard the extra.
+            if (this.missions.current !== offered) {
+              target.dispose()
+              return
+            }
+            this.peds.push(target)
+            this.scene.add(target.group)
+            this.missions.setTarget(target, target.id)
+            hud.toast('The target is marked — check the map', 'bad')
+          })
+        }
       }
     }
     this.dayNight.update(dt, this.camPos)
@@ -367,6 +399,11 @@ export class Game {
     // --- HUD ---
     this.updateHud(dt)
     this.input.endFrame()
+
+    // --- Streak decay ---
+    this.streakTimer = Math.max(0, this.streakTimer - dt)
+    if (this.streakTimer <= 0) this.streak = 0
+    this.meleeTimer = Math.max(0, this.meleeTimer - dt)
 
     // --- Minimap + fullscreen map (throttled) ---
     this.minimapTimer -= dt
@@ -408,6 +445,60 @@ export class Game {
       this.shootFromPlayer()
     }
     this.player.shootTimer = Math.max(0, this.player.shootTimer - dt)
+
+    // Melee (E key / touch PUNCH)
+    if (this.input.consume('melee') && this.meleeTimer <= 0) {
+      this.meleeTimer = MELEE.COOLDOWN
+      this.meleeAttack()
+    }
+  }
+
+  /** Punch/kick arc in front of the player. Quiet, personal, no gunshot heat. */
+  private meleeAttack() {
+    this.player.playOverride('attack-melee-right', 0.45)
+    this.audio.impact(0.35)
+    this.camShake = Math.min(1, this.camShake + 0.08)
+    const fx = Math.sin(this.player.heading)
+    const fz = Math.cos(this.player.heading)
+    let hitSomething = false
+
+    for (const ped of this.peds) {
+      if (ped.state === 'dead') continue
+      const dx = ped.pos.x - this.player.pos.x
+      const dz = ped.pos.z - this.player.pos.z
+      const d = Math.hypot(dx, dz)
+      if (d > MELEE.RANGE) continue
+      const dot = (dx * fx + dz * fz) / (d || 1)
+      if (dot < Math.cos(MELEE.ARC)) continue
+      hitSomething = true
+      hud.set({ hitmarker: performance.now() })
+      this.killPed(ped, ped.pos.clone().setY(1))
+    }
+
+    for (const car of [...this.vehicles, ...this.traffic.cars, ...this.police.cars]) {
+      if (car.dead) continue
+      const dx = car.pos.x - this.player.pos.x
+      const dz = car.pos.z - this.player.pos.z
+      const d = Math.hypot(dx, dz)
+      if (d > MELEE.RANGE + 0.6) continue
+      const dot = (dx * fx + dz * fz) / (d || 1)
+      if (dot < Math.cos(MELEE.ARC)) continue
+      hitSomething = true
+      hud.set({ hitmarker: performance.now() })
+      this.particles.sparks(car.pos.clone().setY(0.6), 5)
+      const destroyed = car.damageBy(MELEE.CAR_DAMAGE)
+      if (destroyed) {
+        this.onCarDestroyed(car, true)
+        this.wanted.addCrime(WANTED.DESTROY_CAR)
+        this.stats.crimes++
+      }
+    }
+
+    if (!hitSomething) {
+      // Whiff: tiny puff of dust so the swing reads.
+      const tip = this.player.pos.clone().add(new THREE.Vector3(fx * 1.2, 0.9, fz * 1.2))
+      this.particles.burst(tip, 3, 0x888899, 1.5, 0.3, 0.7, 2, 0.4)
+    }
   }
 
   private tryEnterVehicle() {
@@ -487,12 +578,8 @@ export class Game {
       if (ped.state === 'dead') continue
       if (dist2D(ped.pos.x, ped.pos.z, v.pos.x, v.pos.z) < Math.max(v.halfW, v.halfL) + 0.3) {
         if (Math.abs(v.speed) > 2) {
-          ped.kill()
-          this.stats.pedsHit++
-          this.wanted.addCrime(WANTED.HIT_PED)
-          this.stats.crimes++
-          this.particles.blood(ped.pos.clone().setY(0.8))
-          hud.toast('Pedestrian down', 'bad')
+          hud.set({ hitmarker: performance.now() })
+          this.killPed(ped, ped.pos.clone().setY(0.8))
         }
       }
     }
@@ -631,9 +718,10 @@ export class Game {
       }
       ped.update(dt, this.city!, danger)
 
-      // Despawn far peds
+      // Despawn far peds (never a living assassination target mid-mission)
       const d = dist2D(ped.pos.x, ped.pos.z, this.player.pos.x, this.player.pos.z)
-      if (d > PEDS.DESPAWN_DIST || (ped.state === 'dead' && ped.deadTimer > 20)) {
+      const keep = this.missions.isTarget(ped.id) && ped.state !== 'dead'
+      if (!keep && (d > PEDS.DESPAWN_DIST || (ped.state === 'dead' && ped.deadTimer > 20))) {
         ped.dispose()
         this.peds.splice(i, 1)
         continue
@@ -682,8 +770,8 @@ export class Game {
             this.audio.impact(closing / 12)
             this.particles.sparks(a.pos.clone().lerp(b.pos, 0.5).setY(0.5), 8)
             this.camShake = Math.min(1, this.camShake + closing / 20)
-            if (aDestroyed) this.onCarDestroyed(a)
-            if (bDestroyed) this.onCarDestroyed(b)
+            if (aDestroyed) this.onCarDestroyed(a, a.driven || b.driven)
+            if (bDestroyed) this.onCarDestroyed(b, a.driven || b.driven)
             // Crime if the player caused it
             if ((a.driven || b.driven) && closing > 5) {
               this.wanted.addCrime(WANTED.HIT_CAR)
@@ -704,12 +792,13 @@ export class Game {
     }
   }
 
-  private onCarDestroyed(car: VehicleEntity) {
+  private onCarDestroyed(car: VehicleEntity, byPlayer = false) {
     this.stats.carsDestroyed++
     this.missions.notifyCarDestroyed(car)
     this.audio.explosion()
     this.particles.explosion(car.pos.clone().setY(0.5))
     this.camShake = Math.min(1, this.camShake + 0.4)
+    if (byPlayer) this.registerKill()
     // Remove wrecked cars after a while
     setTimeout(() => {
       if (this.disposed) return
@@ -724,6 +813,29 @@ export class Game {
         this.traffic.cars.splice(tIdx, 1)
       }
     }, 8000)
+  }
+
+  /** Shared ped-kill bookkeeping: stats, heat, streak, feedback. */
+  private killPed(ped: PedEntity, point: THREE.Vector3) {
+    if (ped.state === 'dead') return
+    ped.kill()
+    this.stats.pedsHit++
+    this.wanted.addCrime(WANTED.HIT_PED)
+    this.stats.crimes++
+    this.particles.blood(point)
+    this.registerKill()
+    hud.toast('Pedestrian down', 'bad')
+  }
+
+  /** Kill-streak XP: kills within STREAK.WINDOW of each other chain a multiplier. */
+  private registerKill() {
+    this.streak = this.streakTimer > 0 ? this.streak + 1 : 1
+    this.streakTimer = STREAK.WINDOW
+    if (this.streak >= 2) {
+      const bonus = this.streak * STREAK.XP_PER_LEVEL
+      this.gainXp(bonus)
+      hud.toast(`Kill x${this.streak}! +${bonus} XP`, 'bad')
+    }
   }
 
   // --- Weapon pickups ---
@@ -761,8 +873,8 @@ export class Game {
       }
     }
 
-    // Armor shards
-    for (const a of this.armorPickups) {
+    // Armor + health shards
+    for (const a of [...this.armorPickups, ...this.healthPickups]) {
       if (!a.active) {
         a.respawn -= dt
         if (a.respawn <= 0) {
@@ -778,9 +890,15 @@ export class Game {
           a.active = false
           a.respawn = PICKUPS.RESPAWN_TIME
           a.group.visible = false
-          this.player.armor = Math.min(100, this.player.armor + 50)
-          hud.toast('+50 armor', 'good')
-          this.particles.burst(this.player.pos.clone().setY(1), 12, 0x3b82f6, 3, 0.5, 1, 3, 0.8)
+          if (a.kind === 'armor') {
+            this.player.armor = Math.min(100, this.player.armor + PICKUPS.ARMOR_AMOUNT)
+            hud.toast(`+${PICKUPS.ARMOR_AMOUNT} armor`, 'good')
+            this.particles.burst(this.player.pos.clone().setY(1), 12, 0x3b82f6, 3, 0.5, 1, 3, 0.8)
+          } else {
+            this.player.health = Math.min(PLAYER.HEALTH, this.player.health + PICKUPS.HEALTH_AMOUNT)
+            hud.toast(`+${PICKUPS.HEALTH_AMOUNT} health`, 'good')
+            this.particles.burst(this.player.pos.clone().setY(1), 12, 0x4ade80, 3, 0.5, 1, 3, 0.8)
+          }
         }
       }
     }
@@ -788,15 +906,25 @@ export class Game {
 
   /** Blue armor shards: +50 armor each, respawn over time. */
   private spawnArmor() {
-    for (let i = 0; i < 4; i++) {
+    this.spawnShards(this.armorPickups, 'armor', 0x3b82f6, PICKUPS.ARMOR_COUNT)
+    this.spawnShards(this.healthPickups, 'health', 0xef4444, PICKUPS.HEALTH_COUNT)
+  }
+
+  private spawnShards(
+    list: Shard[],
+    kind: 'armor' | 'health',
+    color: number,
+    count: number,
+  ) {
+    for (let i = 0; i < count; i++) {
       const core = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.35),
-        new THREE.MeshBasicMaterial({ color: 0x3b82f6 }),
+        new THREE.MeshBasicMaterial({ color }),
       )
       core.position.y = 0.9
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(0.45, 0.58, 24),
-        new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }),
       )
       ring.rotation.x = -Math.PI / 2
       ring.position.y = 0.05
@@ -805,7 +933,7 @@ export class Game {
       const pos = this.randomSidewalkPos(this.city!.spawn, 10, 60)
       group.position.copy(pos)
       this.scene.add(group)
-      this.armorPickups.push({ group, pos, active: true, respawn: 0, phase: Math.random() * Math.PI * 2 })
+      list.push({ group, pos, active: true, respawn: 0, phase: Math.random() * Math.PI * 2, kind })
     }
   }
   private shootFromPlayer() {
@@ -841,21 +969,18 @@ export class Game {
       while (obj) {
         const ped = this.peds.find((p) => p.group === obj)
         if (ped) {
-          if (ped.state !== 'dead') {
-            ped.kill()
-            this.stats.pedsHit++
-            this.wanted.addCrime(WANTED.HIT_PED)
-            this.particles.blood(hit.point)
-            hud.toast('Pedestrian down', 'bad')
-          }
+          hud.set({ hitmarker: performance.now() })
+          this.killPed(ped, hit.point)
           return
         }
         const car = [...this.vehicles, ...this.traffic.cars, ...this.police.cars].find((v) => v.group === obj)
         if (car) {
+          hud.set({ hitmarker: performance.now() })
           const destroyed = car.damageBy(def.damage)
           if (destroyed) {
-            this.onCarDestroyed(car)
+            this.onCarDestroyed(car, true)
             this.wanted.addCrime(WANTED.DESTROY_CAR)
+            this.stats.crimes++
           }
           return
         }
@@ -900,13 +1025,18 @@ export class Game {
   // --- Actions from UI ---
   addMoney(amount: number) {
     this.save.money += amount
-    this.save.xp += Math.round(amount * 0.5)
+    this.gainXp(Math.round(amount * 0.5))
+    this.persist()
+  }
+
+  gainXp(n: number) {
+    if (n <= 0) return
+    this.save.xp += n
     const newLevel = Math.floor(this.save.xp / 500) + 1
     if (newLevel > this.save.level) {
       this.save.level = newLevel
       hud.toast(`Level up! Now level ${newLevel}`, 'good')
     }
-    this.persist()
   }
 
   completeMission() {
@@ -1000,11 +1130,17 @@ export class Game {
       ctx.fillRect(mx - 2 * u, mz - 2 * u, 4 * u, 4 * u)
     }
 
-    // Armor shards
+    // Armor + health shards
     for (const a of this.armorPickups) {
       if (!a.active) continue
       const [mx, mz] = toMap(a.pos.x, a.pos.z)
       ctx.fillStyle = '#3b82f6'
+      ctx.fillRect(mx - 2 * u, mz - 2 * u, 4 * u, 4 * u)
+    }
+    for (const h of this.healthPickups) {
+      if (!h.active) continue
+      const [mx, mz] = toMap(h.pos.x, h.pos.z)
+      ctx.fillStyle = '#4ade80'
       ctx.fillRect(mx - 2 * u, mz - 2 * u, 4 * u, 4 * u)
     }
 
@@ -1057,7 +1193,7 @@ export class Game {
       // Legend
       ctx.fillStyle = 'rgba(255,255,255,0.75)'
       ctx.font = `${13 * u}px sans-serif`
-      ctx.fillText('▲ you   ● police   ■ traffic   ■ weapon   ■ armor   ● mission', 12 * u, S - 12 * u)
+      ctx.fillText('▲ you   ● police   ■ traffic   ■ weapon   ■ armor   ■ health   ● mission', 12 * u, S - 12 * u)
     }
 
     // Border

@@ -112,8 +112,11 @@ export function Hud({ gameRef }: { gameRef: React.MutableRefObject<{ setMinimapC
         </div>
       </div>
 
-      {/* Center: crosshair */}
+      {/* Center: crosshair + hitmarker */}
       {!state.inCar && <div className="hud-center crosshair" />}
+      {performance.now() - state.hitmarker < 180 && (
+        <div className="hud-center hitmarker">✕</div>
+      )}
 
       {/* Toasts */}
       <div style={{ position: 'absolute', bottom: 130, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>

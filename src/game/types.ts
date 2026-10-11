@@ -57,7 +57,7 @@ export interface Bullet {
 
 export interface Mission {
   id: number
-  kind: 'delivery' | 'rampage' | 'getaway' | 'taxi'
+  kind: 'delivery' | 'rampage' | 'getaway' | 'taxi' | 'race' | 'hit' | 'stash'
   title: string
   /** Objective marker position. */
   marker: THREE.Vector3
@@ -69,6 +69,11 @@ export interface Mission {
   targetCount: number
   /** Taxi: pickup then dropoff. */
   phase: 'pickup' | 'dropoff'
+  /** Race checkpoints / stash package positions. */
+  waypoints: THREE.Vector3[]
+  waypointIndex: number
+  /** Hit: target ped id (see MissionSystem target ref). */
+  targetPedId: number | null
   reward: number
   done: boolean
 }

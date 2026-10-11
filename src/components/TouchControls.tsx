@@ -116,6 +116,13 @@ export function TouchControls({ gameRef }: { gameRef: React.MutableRefObject<Tou
       </button>
       <button
         className="touch-btn"
+        style={{ right: 190, bottom: 170 }}
+        onTouchStart={(e) => { e.preventDefault(); input()?.punch() }}
+      >
+        Punch
+      </button>
+      <button
+        className="touch-btn"
         style={{ right: 190, bottom: 90 }}
         onTouchStart={(e) => { e.preventDefault(); hold('brake', true) }}
         onTouchEnd={() => hold('brake', false)}

@@ -53,6 +53,7 @@ export class Input {
   private canvas: HTMLElement
   onPause?: () => void
   onMap?: (down: boolean) => void
+  onStats?: (down: boolean) => void
   private edge = new Set<string>()
 
   constructor(canvas: HTMLElement) {
@@ -104,6 +105,8 @@ export class Input {
     if (e.code === 'Digit3') this.edge.add('weapon3')
     if (e.code === 'Digit4') this.edge.add('weapon4')
     if (e.code === 'KeyM') { this.state.map = true; this.edge.add('map'); this.onMap?.(true) }
+    if (e.code === 'KeyK') { this.onStats?.(true) }
+    if (e.code === 'KeyE') this.edge.add('melee')
     if (e.code === 'Escape' || e.code === 'KeyP') { this.edge.add('pause'); this.onPause?.() }
     if (e.code === 'Space') { this.state.jump = true; this.edge.add('jump') }
   }
@@ -116,6 +119,7 @@ export class Input {
     if (e.code === 'KeyR') this.state.radio = false
     if (e.code === 'KeyV') this.state.camera = false
     if (e.code === 'KeyM') { this.state.map = false; this.onMap?.(false) }
+    if (e.code === 'KeyK') { this.onStats?.(false) }
     if (e.code === 'Space') this.state.jump = false
   }
 
@@ -164,6 +168,11 @@ export class Input {
   setJump(down: boolean) {
     this.state.jump = down
     if (down) this.edge.add('jump')
+  }
+
+  /** Touch punch button: single edge per tap. */
+  punch() {
+    this.edge.add('melee')
   }
 
   /** Clear per-frame deltas. Call at end of frame. */

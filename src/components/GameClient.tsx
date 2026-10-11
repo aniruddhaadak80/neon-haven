@@ -9,6 +9,7 @@ import { PauseMenu } from './PauseMenu'
 import { MapOverlay } from './MapOverlay'
 import { DeathScreen } from './DeathScreen'
 import { TouchControls } from './TouchControls'
+import { StatsPanel } from './StatsPanel'
 import type { Input } from '../game/input'
 
 interface GameApi {
@@ -82,6 +83,7 @@ export default function GameClient() {
       <div ref={containerRef} />
       <Hud gameRef={hudApiRef} />
       <MapOverlay gameRef={mapApiRef} />
+      <StatsPanel />
       <TouchControls gameRef={mapApiRef} />
       <StartScreen onStart={handleStart} />
       <PauseMenu onResume={handleResume} onQuit={handleQuit} />

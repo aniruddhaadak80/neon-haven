@@ -34,12 +34,12 @@ export function StartScreen({ onStart }: { onStart: () => void }) {
           <div className="controls-grid">
             <span className="key">W A S D</span><span>Move / Drive</span>
             <span className="key">MOUSE</span><span>Look / Aim</span>
-            <span className="key">LMB</span><span>Shoot</span>
+            <span className="key">LMB / E</span><span>Shoot / Melee</span>
             <span className="key">F</span><span>Enter / Exit car</span>
             <span className="key">SPACE</span><span>Jump / Handbrake</span>
             <span className="key">SHIFT</span><span>Sprint</span>
             <span className="key">R / T</span><span>Radio on/off / station</span>
-            <span className="key">M</span><span>Fullscreen map</span>
+            <span className="key">M / K</span><span>Fullscreen map / Stats</span>
             <span className="key">1–4</span><span>Switch weapon</span>
             <span className="key">ESC</span><span>Pause</span>
           </div>

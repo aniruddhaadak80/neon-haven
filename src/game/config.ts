@@ -182,4 +182,25 @@ export const PICKUPS = {
   COUNT: 6,
   RESPAWN_TIME: 45,
   PICKUP_DIST: 1.8,
+  /** Armor shards + health packs. */
+  ARMOR_COUNT: 4,
+  HEALTH_COUNT: 3,
+  ARMOR_AMOUNT: 50,
+  HEALTH_AMOUNT: 50,
+} as const
+
+export const MELEE = {
+  COOLDOWN: 0.55,
+  RANGE: 2.1,
+  /** Half-angle of the punch arc. */
+  ARC: 0.9,
+  PED_DAMAGE: 100,
+  CAR_DAMAGE: 12,
+} as const
+
+export const STREAK = {
+  /** Seconds between kills to keep the streak alive. */
+  WINDOW: 6,
+  /** Bonus XP per streak level from level 2 up. */
+  XP_PER_LEVEL: 15,
 } as const

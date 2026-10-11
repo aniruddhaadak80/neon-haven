@@ -26,6 +26,10 @@ export interface HudState {
   damageFlash: number
   /** True while the map overlay is open. */
   mapOpen: boolean
+  /** True while the stats overlay is open. */
+  statsOpen: boolean
+  /** performance.now() of the last ranged/melee hit (hitmarker flash). */
+  hitmarker: number
   /** Currently equipped weapon id. */
   weapon: string
   /** Owned weapon ids. */
@@ -55,6 +59,8 @@ class HudStore {
     loadLabel: '',
     damageFlash: 0,
     mapOpen: false,
+    statsOpen: false,
+    hitmarker: 0,
     weapon: 'pistol',
     weapons: ['pistol'],
     save: {

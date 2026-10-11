@@ -3,7 +3,7 @@ import { MISSIONS, WORLD } from '../config'
 import { makeRng, randRange, formatTime, formatDist } from '../utils'
 import type { CityData } from '../world/City'
 import type { VehicleEntity } from '../entities/Vehicle'
-import type { Mission } from '../types'
+import type { Mission, Ped } from '../types'
 
 const rng = makeRng(WORLD.SEED + 31337)
 let nextMissionId = 1
@@ -17,8 +17,14 @@ export class MissionSystem {
   private ring: THREE.Mesh
   /** Seconds until the next mission is offered. */
   cooldown = 6
+  /** Hit missions: the marked target. Set by the Game after offering. */
+  private target: Ped | null = null
+  /** Stash missions: one small marker per remaining package. */
+  private extraMarkers: THREE.Mesh[] = []
+  private scene: THREE.Scene
 
   constructor(scene: THREE.Scene, city: CityData) {
+    this.scene = scene
     this.city = city
     this.marker = new THREE.Group()
     // Vertical light pillar.
@@ -67,7 +73,7 @@ export class MissionSystem {
     if (this.cooldown > 0) return null
     this.cooldown = MISSIONS.OFFER_DELAY
 
-    const kinds: Mission['kind'][] = ['delivery', 'rampage', 'getaway', 'taxi']
+    const kinds: Mission['kind'][] = ['delivery', 'rampage', 'getaway', 'taxi', 'race', 'hit', 'stash']
     const kind = kinds[Math.floor(rng() * kinds.length)]!
     const marker = this.randomStreetPos()
     const dist = marker.distanceTo(playerPos)
@@ -85,6 +91,9 @@ export class MissionSystem {
       destroyed: 0,
       targetCount: 0,
       phase: 'pickup',
+      waypoints: [],
+      waypointIndex: 0,
+      targetPedId: null,
       reward,
       done: false,
     }
@@ -98,13 +107,50 @@ export class MissionSystem {
     } else if (kind === 'getaway') {
       mission.title = `Getaway — lose the heat and reach the garage`
       mission.targetCount = 1
+    } else if (kind === 'race') {
+      // Chain of street checkpoints starting near the player.
+      const count = 4 + Math.floor(rng() * 3)
+      let prev = marker
+      mission.waypoints = [marker]
+      for (let i = 1; i < count; i++) {
+        let best = this.randomStreetPos()
+        let bestD = -1
+        for (let a = 0; a < 8; a++) {
+          const cand = this.randomStreetPos()
+          const d = cand.distanceTo(prev)
+          if (d > bestD && d > 12) { bestD = d; best = cand }
+        }
+        mission.waypoints.push(best)
+        prev = best
+      }
+      let total = 0
+      for (let i = 1; i < mission.waypoints.length; i++) total += mission.waypoints[i]!.distanceTo(mission.waypoints[i - 1]!)
+      mission.targetCount = count
+      mission.timeLeft = mission.timeTotal = Math.max(60, total * MISSIONS.TIME_PER_METER * 1.4)
+      mission.reward = Math.round(MISSIONS.REWARD_BASE * 1.5 + total * MISSIONS.REWARD_PER_METER)
+      mission.title = `Street race — hit ${count} checkpoints`
+    } else if (kind === 'hit') {
+      mission.title = `Hit — take out the marked target`
+      mission.targetCount = 1
+      mission.timeLeft = mission.timeTotal = Math.max(90, time * 1.5)
+      mission.reward = Math.round(reward * 1.6)
+    } else if (kind === 'stash') {
+      const count = 5
+      mission.waypoints = []
+      for (let i = 0; i < count; i++) mission.waypoints.push(this.randomStreetPos())
+      mission.targetCount = count
+      mission.timeLeft = mission.timeTotal = Math.max(90, time * 2)
+      mission.reward = Math.round(reward * 1.4)
+      mission.title = `Stash run — grab ${count} packages`
+      this.showExtraMarkers(mission.waypoints)
     } else {
       mission.title = `Taxi — pick up the fare`
       mission.targetCount = 2
     }
 
     this.current = mission
-    this.marker.visible = true
+    // Stash packages carry their own markers; the main pillar stays hidden.
+    this.marker.visible = kind !== 'stash'
     this.marker.position.copy(marker)
     return mission
   }
@@ -168,7 +214,91 @@ export class MissionSystem {
         return 'done'
       }
     }
+    if (m.kind === 'race') {
+      const cp = m.waypoints[m.waypointIndex]
+      if (cp && pos.distanceTo(cp) < 4) {
+        m.waypointIndex++
+        if (m.waypointIndex >= m.waypoints.length) {
+          this.complete()
+          return 'done'
+        }
+        m.marker = m.waypoints[m.waypointIndex]!
+        this.marker.position.copy(m.marker)
+      }
+    }
+    if (m.kind === 'hit') {
+      if (this.target) {
+        // Marker stalks the target.
+        this.target.pos.y = 0
+        m.marker.set(this.target.pos.x, 0, this.target.pos.z)
+        this.marker.position.copy(m.marker)
+        if (this.target.state === 'dead') {
+          this.complete()
+          return 'done'
+        }
+      } else if (m.targetPedId === null) {
+        // Target was never spawned (safety): fail gracefully.
+        this.fail()
+        return 'failed'
+      }
+    }
+    if (m.kind === 'stash') {
+      let collected = false
+      m.waypoints = m.waypoints.filter((w) => {
+        if (pos.distanceTo(w) < 3) { collected = true; return false }
+        return true
+      })
+      if (collected) {
+        m.waypointIndex = m.targetCount - m.waypoints.length
+        this.showExtraMarkers(m.waypoints)
+        if (m.waypoints.length === 0) {
+          this.complete()
+          return 'done'
+        }
+      }
+    }
     return null
+  }
+
+  /** Called by the Game right after a hit mission is offered. */
+  setTarget(ped: Ped | null, pedId: number | null) {
+    this.target = ped
+    if (this.current && this.current.kind === 'hit') {
+      this.current.targetPedId = pedId
+      if (ped) {
+        this.current.marker.set(ped.pos.x, 0, ped.pos.z)
+        this.marker.position.copy(this.current.marker)
+      }
+    }
+  }
+
+  isTarget(pedId: number): boolean {
+    return !!this.current && this.current.kind === 'hit' && this.current.targetPedId === pedId
+  }
+
+  private showExtraMarkers(points: THREE.Vector3[]) {
+    this.clearExtraMarkers()
+    const geo = new THREE.OctahedronGeometry(0.45)
+    for (const p of points) {
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x00ff88 }))
+      mesh.position.set(p.x, 2.2, p.z)
+      this.scene.add(mesh)
+      this.extraMarkers.push(mesh)
+    }
+    // Main pillar stays hidden while packages have their own markers.
+    this.marker.visible = false
+  }
+
+  private clearExtraMarkers() {
+    let geo: THREE.BufferGeometry | null = null
+    for (const mesh of this.extraMarkers) {
+      mesh.removeFromParent()
+      geo = mesh.geometry
+      const mat = mesh.material as THREE.MeshBasicMaterial
+      mat.dispose()
+    }
+    geo?.dispose()
+    this.extraMarkers = []
   }
 
   private complete() {
@@ -176,11 +306,15 @@ export class MissionSystem {
     this.current.done = true
     this.current = null
     this.marker.visible = false
+    this.clearExtraMarkers()
+    this.target = null
   }
 
   private fail() {
     this.current = null
     this.marker.visible = false
+    this.clearExtraMarkers()
+    this.target = null
   }
 
   /** Drop the active mission without reward (e.g. player died). */
@@ -194,6 +328,8 @@ export class MissionSystem {
     if (!m) return null
     let progress = ''
     if (m.kind === 'rampage') progress = ` (${m.destroyed}/${m.targetCount})`
+    if (m.kind === 'race') progress = ` (${m.waypointIndex}/${m.waypoints.length})`
+    if (m.kind === 'stash') progress = ` (${m.targetCount - m.waypoints.length}/${m.targetCount})`
     if (m.kind === 'taxi') progress = m.phase === 'pickup' ? ' — pick up' : ' — drop off'
     return {
       title: `${m.title}${progress}`,
@@ -203,6 +339,7 @@ export class MissionSystem {
   }
 
   dispose() {
+    this.clearExtraMarkers()
     this.marker.removeFromParent()
   }
 }
