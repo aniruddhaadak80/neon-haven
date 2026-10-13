@@ -14,6 +14,8 @@ export interface CityData {
   streetsZ: number[]
   spawn: THREE.Vector3
   missionSpots: THREE.Vector3[]
+  /** Pay'n'Spray garage location (street, always drivable). */
+  paynspray: THREE.Vector3
   /** Emissive neon sign materials (DayNight controls their glow). */
   neon: THREE.MeshBasicMaterial[]
   bounds: number
@@ -152,7 +154,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
     return geoCache.get(k)!
   }
 
-  let placed = 0
+
   for (let bj = 0; bj < BLOCKS; bj++) {
     for (let bi = 0; bi < BLOCKS; bi++) {
       const district = districtAt(bi, bj)
@@ -186,7 +188,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
             const h = randRange(rng, 1.4, 2.6)
             commercial.add(await loadGeo('commercial', model), mat4(tileToWorld(i), tileToWorld(j), 0, h))
             block(i, j, 0)
-            placed++
+
             // Neon strip on the face.
             if (rng() < 0.7) {
               const mat = new THREE.MeshBasicMaterial({ color: pick(rng, neonColors) })
@@ -209,7 +211,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
             const h = randRange(rng, 0.9, 1.9)
             commercial.add(await loadGeo('commercial', model), mat4(tileToWorld(i), tileToWorld(j), 0, h))
             block(i, j, 0)
-            placed++
+
             if (rng() < 0.3) {
               const mat = new THREE.MeshBasicMaterial({ color: pick(rng, neonColors) })
               mat.userData.baseColor = mat.color.clone()
@@ -231,7 +233,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
             if (i > i1 || j > j1) continue
             suburban.add(await loadGeo('suburban', pick(rng, suburbanB)), mat4(tileToWorld(i), tileToWorld(j), 0, randRange(rng, 0.9, 1.3)))
             block(i, j, 0)
-            placed++
+
             if (rng() < 0.6) {
               nature.add(await loadGeo('nature', pick(rng, trees)), mat4(tileToWorld(i) + randRange(rng, 0.8, 1.4), tileToWorld(j) + randRange(rng, 0.8, 1.4), 0, randRange(rng, 0.7, 1.1)))
             }
@@ -248,7 +250,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
         if (i > i1 || j > j1) continue
         industrial.add(await loadGeo('industrial', pick(rng, industrialB)), mat4(tileToWorld(i), tileToWorld(j), 0, randRange(rng, 1.0, 1.6)))
         block(i, j, 0)
-        placed++
+
       }
       // crates + barrels
       for (let k = 0; k < 4; k++) {
@@ -344,6 +346,12 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
       missionSpots.push(new THREE.Vector3(tileToWorld(i), 0, tileToWorld(j)))
     }
   }
+  // Pay'n'Spray on a fixed street corner, far from spawn so it's a drive.
+  const paynspray = new THREE.Vector3(
+    streetsX[streetsX.length - 3]!,
+    0,
+    streetsZ[2]!,
+  )
 
   onProgress?.(1, 'done')
   return {
@@ -355,6 +363,7 @@ export async function buildCity(onProgress?: (frac: number, label: string) => vo
     streetsZ,
     spawn,
     missionSpots,
+    paynspray,
     neon,
     bounds: HALF + 2,
   }
@@ -381,13 +390,12 @@ export function resolveCollision(city: CityData, x: number, z: number, r: number
       const j = j0 + dj
       if (i < 0 || j < 0 || i >= city.size || j >= city.size) continue
       if (city.colliders[j * city.size + i] !== 1) continue
-      // Cell AABB in world space.
-      const cx = city.origin + i
-      const cz = city.origin + j
-      const minX = cx - 0.5
-      const maxX = cx + 0.5
-      const minZ = cz - 0.5
-      const maxZ = cz + 0.5
+      // Cell AABB in world space. Tile (i,j) spans
+      // [origin+i, origin+i+1], matching isBlocked's floor() mapping.
+      const minX = city.origin + i
+      const maxX = minX + 1
+      const minZ = city.origin + j
+      const maxZ = minZ + 1
       // Closest point on AABB to circle centre.
       const nx = Math.max(minX, Math.min(px, maxX))
       const nz = Math.max(minZ, Math.min(pz, maxZ))

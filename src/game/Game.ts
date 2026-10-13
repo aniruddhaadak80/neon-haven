@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { WORLD, PLAYER, CAR, PEDS, POLICE, RENDER, CAMERA, SAVE_KEY, WANTED, WEAPONS, WEAPON_ORDER, PICKUPS, MELEE, STREAK } from './config'
+import { WORLD, PLAYER, CAR, PEDS, POLICE, RENDER, CAMERA, SAVE_KEY, WANTED, WEAPONS, WEAPON_ORDER, PICKUPS, MELEE, STREAK, NITRO, PAYNSPRAY } from './config'
 import { Input } from './input'
 import { buildCity, resolveCollision, isBlocked, type CityData } from './world/City'
 import { Player, createPlayer } from './entities/Player'
@@ -15,7 +15,7 @@ import { MissionSystem } from './systems/Missions'
 import { hud } from './systems/HudStore'
 import { getVehicleModel, TRAFFIC_MODELS, CHARACTER_KEYS, getStaticGeometry, getTexture } from './assets/AssetLibrary'
 import { clamp, damp, dist2D, formatDist } from './utils'
-import type { Vehicle, SaveData } from './types'
+import type { SaveData } from './types'
 
 interface Shard {
   group: THREE.Group
@@ -23,7 +23,7 @@ interface Shard {
   active: boolean
   respawn: number
   phase: number
-  kind: 'armor' | 'health'
+  kind: 'armor' | 'health' | 'bribe'
 }
 
 export class Game {
@@ -66,10 +66,14 @@ export class Game {
   private pickups: { group: THREE.Group; ring: THREE.Mesh; pos: THREE.Vector3; weapon: string; active: boolean; respawn: number; phase: number }[] = []
   private armorPickups: Shard[] = []
   private healthPickups: Shard[] = []
+  private bribePickups: Shard[] = []
   /** Kill-streak state for XP bonuses. */
   private streak = 0
   private streakTimer = 0
   private meleeTimer = 0
+  /** Pay'n'Spray garage marker + enter-edge tracking. */
+  private garage: THREE.Group | null = null
+  private garageInside = false
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
@@ -195,6 +199,7 @@ export class Game {
     hud.set({ loadFrac: 0.96, loadLabel: 'hiding weapons' })
     await this.spawnPickups()
     this.spawnArmor()
+    this.buildGarage()
 
     // Snap the camera to the spawn so the first frame isn't a cross-map swoop.
     this.camPos.set(this.city.spawn.x, CAMERA.FOOT_HEIGHT + 1, this.city.spawn.z - CAMERA.FOOT_DIST)
@@ -280,7 +285,6 @@ export class Game {
   }
 
   private update(dt: number) {
-    const city = this.city!
     const input = this.input.state
 
     // --- Look ---
@@ -319,6 +323,14 @@ export class Game {
     // --- Pickups ---
     this.updatePickups(dt)
 
+    // --- Pay'n'Spray garage ---
+    this.updateGarage(dt)
+
+    // --- Undercover: stolen cop car scrubs heat faster ---
+    if (this.player.vehicle?.police && this.wanted.level > 0) {
+      this.wanted.coolDown(WANTED.UNDERCOVER_DECAY * dt)
+    }
+
     // --- Camera ---
     this.updateCamera(dt)
 
@@ -337,8 +349,8 @@ export class Game {
     // Cars (traffic + police) hitting the on-foot player.
     this.updatePlayerRunover(dt)
     this.updatePeds(dt)
-    this.updateVehicleCollisions(dt)
-    this.updateBullets(dt)
+    this.updateVehicleCollisions()
+    this.updateBullets()
     const missionResult = this.missions.update(dt, this.player.pos, this.wanted.level)
     if (missionResult === 'done') this.completeMission()
     else if (missionResult === 'failed') this.failMission()
@@ -440,7 +452,7 @@ export class Game {
     }
 
     // Shoot
-    if ((input.shoot || (input.touch.active && input.touch.fire)) && this.player.shootTimer <= 0) {
+    if ((input.shoot || input.touch.fire) && this.player.shootTimer <= 0) {
       this.player.shootTimer = WEAPONS[this.weapon]!.cooldown
       this.shootFromPlayer()
     }
@@ -548,9 +560,21 @@ export class Game {
 
     const throttle = (input.forward ? 1 : 0) - (input.back ? 1 : 0) + (input.touch.active ? -input.touch.y : 0)
     const steer = (input.left ? 1 : 0) - (input.right ? 1 : 0) + (input.touch.active ? -input.touch.x : 0)
-    const handbrake = input.handbrake || (input.touch.active && input.touch.brake)
+    const handbrake = input.handbrake || input.touch.brake
 
-    v.update(dt, clamp(throttle, -1, 1), clamp(steer, -1, 1), handbrake)
+    // Nitro: Shift (or touch NITRO) while moving forward burns the meter.
+    const wantBoost = (input.sprint || input.touch.nitro) && throttle > 0 && v.nitro > 0
+    if (wantBoost) {
+      v.nitro = Math.max(0, v.nitro - NITRO.DRAIN * dt)
+      const back = new THREE.Vector3(Math.sin(v.heading), 0, Math.cos(v.heading))
+      const flames = v.pos.clone().addScaledVector(back, -v.halfL).setY(0.5)
+      this.particles.burst(flames, 3, 0x33ccff, 4, 0.25, 1.1, -2, 0.2)
+      this.camShake = Math.min(1, this.camShake + dt * 1.2)
+    } else {
+      v.nitro = Math.min(NITRO.MAX, v.nitro + NITRO.REGEN * dt)
+    }
+
+    v.update(dt, clamp(throttle * (wantBoost ? NITRO.MULT : 1), -1, NITRO.MULT), clamp(steer, -1, 1), handbrake, wantBoost ? NITRO.MULT : 1)
 
     // Building collision
     const [nx, nz] = resolveCollision(this.city!, v.pos.x, v.pos.z, Math.max(v.halfW, v.halfL) * 0.7)
@@ -594,7 +618,7 @@ export class Game {
     }
 
     // Drive-by shooting
-    if ((input.shoot || (input.touch.active && input.touch.fire)) && this.player.shootTimer <= 0) {
+    if ((input.shoot || input.touch.fire) && this.player.shootTimer <= 0) {
       this.player.shootTimer = WEAPONS[this.weapon]!.cooldown
       this.shootFromPlayer()
     }
@@ -739,7 +763,7 @@ export class Game {
   }
 
   // --- Vehicle-vehicle collisions ---
-  private updateVehicleCollisions(dt: number) {
+  private updateVehicleCollisions() {
     const all = [...this.vehicles, ...this.traffic.cars, ...this.police.cars]
     for (let i = 0; i < all.length; i++) {
       for (let j = i + 1; j < all.length; j++) {
@@ -794,7 +818,7 @@ export class Game {
 
   private onCarDestroyed(car: VehicleEntity, byPlayer = false) {
     this.stats.carsDestroyed++
-    this.missions.notifyCarDestroyed(car)
+    this.missions.notifyCarDestroyed()
     this.audio.explosion()
     this.particles.explosion(car.pos.clone().setY(0.5))
     this.camShake = Math.min(1, this.camShake + 0.4)
@@ -873,8 +897,8 @@ export class Game {
       }
     }
 
-    // Armor + health shards
-    for (const a of [...this.armorPickups, ...this.healthPickups]) {
+    // Armor + health + bribe shards
+    for (const a of [...this.armorPickups, ...this.healthPickups, ...this.bribePickups]) {
       if (!a.active) {
         a.respawn -= dt
         if (a.respawn <= 0) {
@@ -894,25 +918,94 @@ export class Game {
             this.player.armor = Math.min(100, this.player.armor + PICKUPS.ARMOR_AMOUNT)
             hud.toast(`+${PICKUPS.ARMOR_AMOUNT} armor`, 'good')
             this.particles.burst(this.player.pos.clone().setY(1), 12, 0x3b82f6, 3, 0.5, 1, 3, 0.8)
-          } else {
+          } else if (a.kind === 'health') {
             this.player.health = Math.min(PLAYER.HEALTH, this.player.health + PICKUPS.HEALTH_AMOUNT)
             hud.toast(`+${PICKUPS.HEALTH_AMOUNT} health`, 'good')
             this.particles.burst(this.player.pos.clone().setY(1), 12, 0x4ade80, 3, 0.5, 1, 3, 0.8)
+          } else {
+            this.wanted.coolDown(WANTED.BRIBE_RELIEF)
+            hud.toast('Bribe delivered — heat dropped', 'good')
+            this.particles.burst(this.player.pos.clone().setY(1), 12, 0xffd700, 3, 0.5, 1, 3, 0.8)
           }
         }
       }
     }
   }
 
-  /** Blue armor shards: +50 armor each, respawn over time. */
+  /** Pay'n'Spray: amber wrench beacon. Drive in for repair + clean record. */
+  private buildGarage() {
+    const g = new THREE.Group()
+    const pillar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 0.6, 24, 12, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }),
+    )
+    pillar.position.y = 12
+    const beacon = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.7),
+      new THREE.MeshBasicMaterial({ color: 0xffaa00 }),
+    )
+    beacon.position.y = 2.6
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(2.6, 3.1, 28),
+      new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }),
+    )
+    ring.rotation.x = -Math.PI / 2
+    ring.position.y = 0.05
+    g.add(pillar, beacon, ring)
+    g.position.copy(this.city!.paynspray)
+    this.scene.add(g)
+    this.garage = g
+  }
+
+  /** Service the driven car when it enters the garage radius. */
+  private updateGarage(dt: number) {
+    if (this.garage) {
+      const t = performance.now() / 1000
+      const beacon = this.garage.children[1]
+      if (beacon) {
+        beacon.rotation.y += dt * 1.8
+        beacon.position.y = 2.6 + Math.sin(t * 2) * 0.25
+      }
+    }
+    if (!this.garage || !this.player.isDriving || !this.player.vehicle) {
+      this.garageInside = false
+      return
+    }
+    const v = this.player.vehicle
+    const inside = dist2D(v.pos.x, v.pos.z, this.city!.paynspray.x, this.city!.paynspray.z) < PAYNSPRAY.RADIUS
+    if (inside && !this.garageInside) {
+      this.garageInside = true
+      const needsWork = v.health < CAR.HEALTH || this.wanted.level > 0
+      if (!needsWork) {
+        hud.toast("Pay'n'Spray: ride's already clean", 'info')
+        return
+      }
+      if (this.save.money < PAYNSPRAY.COST) {
+        hud.toast(`Pay'n'Spray needs $${PAYNSPRAY.COST}`, 'bad')
+        return
+      }
+      this.save.money -= PAYNSPRAY.COST
+      v.repair()
+      this.wanted.reset()
+      this.police.clear()
+      this.particles.burst(v.pos.clone().setY(1), 20, 0xffaa00, 4, 0.7, 1.2, 3, 0.8)
+      hud.toast(`Pay'n'Spray: repaired + record wiped (-$${PAYNSPRAY.COST})`, 'good')
+      this.persist()
+    } else if (!inside) {
+      this.garageInside = false
+    }
+  }
+
+  /** Blue armor shards (+50), red health packs (+50), gold bribes (-heat). */
   private spawnArmor() {
     this.spawnShards(this.armorPickups, 'armor', 0x3b82f6, PICKUPS.ARMOR_COUNT)
     this.spawnShards(this.healthPickups, 'health', 0xef4444, PICKUPS.HEALTH_COUNT)
+    this.spawnShards(this.bribePickups, 'bribe', 0xffd700, PICKUPS.BRIBE_COUNT)
   }
 
   private spawnShards(
     list: Shard[],
-    kind: 'armor' | 'health',
+    kind: 'armor' | 'health' | 'bribe',
     color: number,
     count: number,
   ) {
@@ -991,7 +1084,7 @@ export class Game {
 
   private bullets: { pos: THREE.Vector3; vel: THREE.Vector3; life: number; mesh: THREE.Mesh }[] = []
 
-  private updateBullets(dt: number) {
+  private updateBullets() {
     // Tracer bullets are instant (raycast), so this is a no-op placeholder
     // kept for future projectile weapons.
   }
@@ -1012,6 +1105,8 @@ export class Game {
       wantedFlash: this.wanted.justChanged,
       speedKmh: this.player.isDriving && this.player.vehicle ? this.player.vehicle.speedKmh : this.player.speed * 6,
       inCar: this.player.isDriving,
+      carHealth: this.player.vehicle ? Math.max(0, Math.round((this.player.vehicle.health / CAR.HEALTH) * 100)) : null,
+      nitro: this.player.vehicle ? Math.round(this.player.vehicle.nitro) : null,
       mission: mission ? { ...mission, dist } : null,
       radioOn: this.audio.radioOn,
       radioStation: this.audio.radioStation,
@@ -1143,6 +1238,24 @@ export class Game {
       ctx.fillStyle = '#4ade80'
       ctx.fillRect(mx - 2 * u, mz - 2 * u, 4 * u, 4 * u)
     }
+    for (const b of this.bribePickups) {
+      if (!b.active) continue
+      const [mx, mz] = toMap(b.pos.x, b.pos.z)
+      ctx.fillStyle = '#ffd700'
+      ctx.fillRect(mx - 2 * u, mz - 2 * u, 4 * u, 4 * u)
+    }
+
+    // Pay'n'Spray garage
+    {
+      const [mx, mz] = toMap(city.paynspray.x, city.paynspray.z)
+      ctx.fillStyle = '#ffaa00'
+      const s = 3.5 * u
+      ctx.save()
+      ctx.translate(mx, mz)
+      ctx.rotate(Math.PI / 4)
+      ctx.fillRect(-s / 2, -s / 2, s, s)
+      ctx.restore()
+    }
 
     // Mission marker
     const m = this.missions.current
@@ -1193,7 +1306,7 @@ export class Game {
       // Legend
       ctx.fillStyle = 'rgba(255,255,255,0.75)'
       ctx.font = `${13 * u}px sans-serif`
-      ctx.fillText('▲ you   ● police   ■ traffic   ■ weapon   ■ armor   ■ health   ● mission', 12 * u, S - 12 * u)
+      ctx.fillText('▲ you   ● police   ■ traffic   ■ weapon   ■ armor   ■ health   ■ bribe   ◆ garage   ● mission', 12 * u, S - 12 * u)
     }
 
     // Border

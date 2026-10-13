@@ -1,8 +1,7 @@
 import * as THREE from 'three'
 import { MISSIONS, WORLD } from '../config'
-import { makeRng, randRange, formatTime, formatDist } from '../utils'
+import { makeRng, randRange, formatTime } from '../utils'
 import type { CityData } from '../world/City'
-import type { VehicleEntity } from '../entities/Vehicle'
 import type { Mission, Ped } from '../types'
 
 const rng = makeRng(WORLD.SEED + 31337)
@@ -74,7 +73,9 @@ export class MissionSystem {
     this.cooldown = MISSIONS.OFFER_DELAY
 
     const kinds: Mission['kind'][] = ['delivery', 'rampage', 'getaway', 'taxi', 'race', 'hit', 'stash']
-    const kind = kinds[Math.floor(rng() * kinds.length)]!
+    let kind = kinds[Math.floor(rng() * kinds.length)]!
+    // No point running from heat you don't have.
+    if (kind === 'getaway' && wanted === 0) kind = 'delivery'
     const marker = this.randomStreetPos()
     const dist = marker.distanceTo(playerPos)
     const reward = Math.round(MISSIONS.REWARD_BASE + dist * MISSIONS.REWARD_PER_METER)
@@ -156,7 +157,7 @@ export class MissionSystem {
   }
 
   /** Count a wreck toward the active rampage mission (any car counts). */
-  notifyCarDestroyed(_car: VehicleEntity) {
+  notifyCarDestroyed() {
     if (!this.current || this.current.kind !== 'rampage') return
     this.current.destroyed++
   }

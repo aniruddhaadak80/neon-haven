@@ -9,6 +9,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "assets:fetch": "powershell -ExecutionPolicy Bypass -File scripts/fetch-assets.ps1",
     "assets:prepare": "node scripts/prepare-models.mjs",
     "assets:inspect": "node scripts/inspect-glb.mjs"
@@ -23,6 +25,7 @@
     "three": "0.181.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@tailwindcss/postcss": "4.1.14",
     "@types/node": "22.18.8",
     "@types/react": "19.1.16",
@@ -31,7 +34,9 @@
     "eslint": "9.37.0",
     "eslint-config-next": "15.5.27",
     "tailwindcss": "4.1.14",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.4"
   },
   "allowScripts": {
     "@tailwindcss/oxide@4.1.14": true,

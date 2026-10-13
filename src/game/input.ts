@@ -22,7 +22,7 @@ export interface InputState {
   /** Pointer is locked (mouse look active). */
   locked: boolean
   /** Touch joystick vector (-1..1) and buttons. */
-  touch: { active: boolean; x: number; y: number; fire: boolean; action: boolean; brake: boolean }
+  touch: { active: boolean; x: number; y: number; fire: boolean; action: boolean; brake: boolean; nitro: boolean }
 }
 
 const KEY_MAP: Record<string, keyof InputState> = {
@@ -46,7 +46,7 @@ export class Input {
     interact: false, shoot: false, shootHeld: false,
     radio: false, pause: false, map: false, camera: false,
     lookX: 0, lookY: 0, locked: false,
-    touch: { active: false, x: 0, y: 0, fire: false, action: false, brake: false },
+    touch: { active: false, x: 0, y: 0, fire: false, action: false, brake: false, nitro: false },
   }
 
   private keys = new Set<string>()

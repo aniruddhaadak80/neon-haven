@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { CAR, WORLD } from '../config'
+import { CAR, WORLD, NITRO } from '../config'
 import type { VehicleModel } from '../assets/AssetLibrary'
 import { clamp, damp } from '../utils'
 import type { Vehicle } from '../types'
@@ -20,6 +20,8 @@ export class VehicleEntity implements Vehicle {
   health = CAR.HEALTH
   dead = false
   driven = false
+  /** Nitro meter 0..NITRO.MAX. */
+  nitro = 100
   ai: { axis: 'x' | 'z'; dir: 1 | -1; lane: number } | null = null
   police = false
   siren = false
@@ -35,6 +37,7 @@ export class VehicleEntity implements Vehicle {
   /** Visual damage 0..1. */
   damage = 0
   private smokeTimer = 0
+  private baseColor: THREE.Color
 
   constructor(model: string, vm: VehicleModel, x: number, z: number, heading: number) {
     this.model = model
@@ -44,6 +47,15 @@ export class VehicleEntity implements Vehicle {
     this.halfW = vm.halfW * WORLD.CAR_SCALE
     this.halfL = vm.halfL * WORLD.CAR_SCALE
     this.wheelRadius = vm.wheelRadius * WORLD.CAR_SCALE
+
+    // Clone() shares materials across instances — give this car its own so
+    // damage charring / repair never leaks onto other cars.
+    this.group.traverse((o) => {
+      const mesh = o as THREE.Mesh
+      if (mesh.isMesh && mesh.material) {
+        mesh.material = (mesh.material as THREE.Material).clone()
+      }
+    })
 
     // Clone() shares geometry; pull out body + wheels for animation.
     this.body = this.group.getObjectByName('body') as THREE.Mesh
@@ -59,6 +71,7 @@ export class VehicleEntity implements Vehicle {
       // Fallback: first mesh is the body.
       this.body = this.group.children.find((c) => c instanceof THREE.Mesh) as THREE.Mesh
     }
+    this.baseColor = (this.body.material as THREE.MeshLambertMaterial).color.clone()
 
     // Blob shadow.
     const blobGeo = new THREE.CircleGeometry(Math.max(this.halfW, this.halfL) * 1.15, 20)
@@ -82,11 +95,12 @@ export class VehicleEntity implements Vehicle {
 
   /**
    * Arcade bicycle physics.
-   * @param throttle -1..1 (reverse..forward)
+   * @param throttle -1..1 scaled (nitro passes >1)
    * @param steerInput -1..1 (left..right)
    * @param handbrake bool
+   * @param speedMult top-speed multiplier (nitro)
    */
-  update(dt: number, throttle: number, steerInput: number, handbrake: boolean) {
+  update(dt: number, throttle: number, steerInput: number, handbrake: boolean, speedMult = 1) {
     if (this.dead) {
       this.speed = damp(this.speed, 0, 4, dt)
       this.latVel = damp(this.latVel, 0, 6, dt)
@@ -114,7 +128,7 @@ export class VehicleEntity implements Vehicle {
     fSpeed -= fSpeed * CAR.DRAG * dt
     const rr = Math.sign(fSpeed) * CAR.ROLL_RESIST * dt
     fSpeed = Math.abs(fSpeed) > Math.abs(rr) ? fSpeed - rr : 0
-    fSpeed = clamp(fSpeed, -CAR.MAX_REVERSE, CAR.MAX_SPEED)
+    fSpeed = clamp(fSpeed, -CAR.MAX_REVERSE, CAR.MAX_SPEED * speedMult)
 
     // Lateral grip (handbrake = drift).
     const grip = handbrake ? CAR.HANDBRAKE_GRIP : CAR.GRIP
@@ -186,6 +200,15 @@ export class VehicleEntity implements Vehicle {
       return true
     }
     return false
+  }
+
+  /** Full restore (Pay'n'Spray): health, paint, nitro. */
+  repair() {
+    this.health = CAR.HEALTH
+    this.damage = 0
+    this.dead = false
+    this.nitro = NITRO.MAX
+    ;(this.body.material as THREE.MeshLambertMaterial).color.copy(this.baseColor)
   }
 
   setHeadlights(on: boolean) {

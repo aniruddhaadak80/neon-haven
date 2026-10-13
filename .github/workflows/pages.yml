@@ -31,6 +31,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Tests
+        run: npm test
+
       # Static export served from /<repo> on GitHub Pages.
       - name: Build
         run: npm run build

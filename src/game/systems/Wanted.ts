@@ -24,6 +24,12 @@ export class WantedSystem {
     this.recompute()
   }
 
+  /** Scrub heat without a crime (bribes, undercover driving, Pay'n'Spray). */
+  coolDown(amount: number) {
+    this.points = Math.max(0, this.points - amount)
+    this.recompute()
+  }
+
   private recompute() {
     let level = 0
     for (let i = 0; i < WANTED.THRESHOLDS.length; i++) {
@@ -52,11 +58,11 @@ export class WantedSystem {
       this.outOfSight = 0
     } else {
       this.outOfSight += dt
-      // Drop one star after enough time out of sight.
+      // Drop exactly one star: just under the current level's floor.
       if (this.outOfSight > POLICE.DROP_TIME) {
         this.outOfSight = 0
         const prevLevel = this.level
-        this.points = WANTED.THRESHOLDS[Math.max(0, this.level - 1)]! - 1
+        this.points = WANTED.THRESHOLDS[this.level]! - 1
         this.recompute()
         if (this.level < prevLevel) this.justChanged = true
       }

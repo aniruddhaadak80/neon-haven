@@ -84,6 +84,22 @@ export function Hud({ gameRef }: { gameRef: React.MutableRefObject<{ setMinimapC
           <>
             <div className="speedo">{Math.round(state.speedKmh)}</div>
             <div className="speedo-unit">KM/H</div>
+            {state.carHealth !== null && (
+              <div className="ride-bar" title="Ride condition">
+                <div
+                  className="ride-fill"
+                  style={{
+                    width: `${state.carHealth}%`,
+                    background: state.carHealth > 50 ? undefined : state.carHealth > 25 ? '#f59e0b' : '#ef4444',
+                  }}
+                />
+              </div>
+            )}
+            {state.nitro !== null && (
+              <div className="nitro-bar" title="Nitro (hold Shift)">
+                <div className="nitro-fill" style={{ width: `${state.nitro}%` }} />
+              </div>
+            )}
           </>
         )}
         {!state.inCar && (

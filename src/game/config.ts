@@ -98,6 +98,10 @@ export const WANTED = {
   DESTROY_CAR: 150,
   /** Points decay per second while not committing crimes. */
   DECAY: 6,
+  /** Heat scrubbed by a bribe pickup. */
+  BRIBE_RELIEF: 320,
+  /** Extra heat decay per second while driving a stolen cop car. */
+  UNDERCOVER_DECAY: 14,
 } as const
 
 export const MISSIONS = {
@@ -182,9 +186,10 @@ export const PICKUPS = {
   COUNT: 6,
   RESPAWN_TIME: 45,
   PICKUP_DIST: 1.8,
-  /** Armor shards + health packs. */
+  /** Armor shards + health packs + bribes. */
   ARMOR_COUNT: 4,
   HEALTH_COUNT: 3,
+  BRIBE_COUNT: 3,
   ARMOR_AMOUNT: 50,
   HEALTH_AMOUNT: 50,
 } as const
@@ -203,4 +208,21 @@ export const STREAK = {
   WINDOW: 6,
   /** Bonus XP per streak level from level 2 up. */
   XP_PER_LEVEL: 15,
+} as const
+
+export const NITRO = {
+  /** Throttle multiplier while boosting. */
+  MULT: 1.8,
+  /** Meter drain per second while boosting. */
+  DRAIN: 32,
+  /** Meter regen per second while not boosting. */
+  REGEN: 9,
+  MAX: 100,
+} as const
+
+export const PAYNSPRAY = {
+  /** Full repair + wanted wipe price. */
+  COST: 200,
+  /** Service radius around the garage marker. */
+  RADIUS: 4,
 } as const

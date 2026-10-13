@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { PLAYER, WORLD } from '../config'
 import { getCharacter, CHARACTER_KEYS } from '../assets/AssetLibrary'
-import { clamp, damp, angleDamp } from '../utils'
+import { damp, angleDamp } from '../utils'
 import type { CharacterRig } from '../assets/AssetLibrary'
 import type { VehicleEntity } from './Vehicle'
 

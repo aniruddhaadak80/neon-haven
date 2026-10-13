@@ -69,8 +69,8 @@ export function TouchControls({ gameRef }: { gameRef: React.MutableRefObject<Tou
     }
   }
 
-  const hold = (key: 'fire' | 'brake', down: boolean) => {
-    input()?.setTouch({ [key]: down } as Partial<{ fire: boolean; brake: boolean }>)
+  const hold = (key: 'fire' | 'brake' | 'nitro', down: boolean) => {
+    input()?.setTouch({ [key]: down } as Partial<{ fire: boolean; brake: boolean; nitro: boolean }>)
   }
 
   const tapAction = () => {
@@ -120,6 +120,14 @@ export function TouchControls({ gameRef }: { gameRef: React.MutableRefObject<Tou
         onTouchStart={(e) => { e.preventDefault(); input()?.punch() }}
       >
         Punch
+      </button>
+      <button
+        className="touch-btn"
+        style={{ right: 270, bottom: 90 }}
+        onTouchStart={(e) => { e.preventDefault(); hold('nitro', true) }}
+        onTouchEnd={() => hold('nitro', false)}
+      >
+        Nitro
       </button>
       <button
         className="touch-btn"

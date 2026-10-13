@@ -14,6 +14,10 @@ export interface HudState {
   wantedFlash: boolean
   speedKmh: number
   inCar: boolean
+  /** Driven vehicle health 0..100 (null on foot). */
+  carHealth: number | null
+  /** Driven vehicle nitro 0..100 (null on foot). */
+  nitro: number | null
   mission: { title: string; time: string; dist: string } | null
   radioOn: boolean
   radioStation: number
@@ -51,6 +55,8 @@ class HudStore {
     wantedFlash: false,
     speedKmh: 0,
     inCar: false,
+    carHealth: null,
+    nitro: null,
     mission: null,
     radioOn: false,
     radioStation: 0,
