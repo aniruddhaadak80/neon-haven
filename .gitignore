@@ -15,3 +15,4 @@ public/assets/
 Thumbs.db
 
 .vercel
+.vercel-deploy.log
