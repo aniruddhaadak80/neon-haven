@@ -100,6 +100,11 @@ export function Hud({ gameRef }: { gameRef: React.MutableRefObject<{ setMinimapC
                 <div className="nitro-fill" style={{ width: `${state.nitro}%` }} />
               </div>
             )}
+            {state.drift > 0 && (
+              <div className="drift-combo">
+                DRIFT ×<b>{state.drift}</b>
+              </div>
+            )}
           </>
         )}
         {!state.inCar && (

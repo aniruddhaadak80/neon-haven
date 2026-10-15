@@ -184,6 +184,23 @@ canvas {
   transition: width 0.15s;
 }
 
+.drift-combo {
+  margin-top: 8px;
+  margin-left: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #ffd75e;
+  text-shadow: 0 0 12px rgba(255, 215, 94, 0.75);
+  animation: drift-pulse 0.35s ease-in-out infinite alternate;
+}
+
+@keyframes drift-pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); }
+}
+
 .speedo {
   font-size: 44px;
   font-weight: 900;

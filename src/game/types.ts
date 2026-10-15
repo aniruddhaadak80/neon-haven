@@ -90,6 +90,8 @@ export interface SaveData {
     pedsHit: number
   }
   bestWanted: number
+  /** Unlocked achievement ids. */
+  achievements: string[]
 }
 
 export type GamePhase = 'menu' | 'loading' | 'playing' | 'paused' | 'dead'

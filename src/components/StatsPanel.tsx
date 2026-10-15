@@ -23,6 +23,7 @@ export function StatsPanel() {
     ['Cars destroyed', `${s.carsDestroyed}`],
     ['Pedestrians hit', `${s.pedsHit}`],
     ['Best wanted level', `${'★'.repeat(state.save.bestWanted) || '—'}`],
+    ['Achievements', `${state.save.achievements.length} / 8`],
   ]
 
   return (

@@ -210,6 +210,32 @@ export const STREAK = {
   XP_PER_LEVEL: 15,
 } as const
 
+export const DRIFT = {
+  /** Lateral slip velocity (m/s) needed to start scoring. */
+  MIN_SLIP: 4,
+  /** Absolute speed (km/h) needed to score. */
+  MIN_SPEED: 35,
+  /** Combo points earned per second of sustained drift. */
+  PER_SEC: 60,
+  /** Minimum banked combo to pay out. */
+  MIN_SCORE: 40,
+  /** Cash paid per combo point. */
+  CASH_PER: 1,
+} as const
+
+export const ACHIEVEMENTS = {
+  first_blood: { name: 'First Blood', desc: 'Take down your first target' },
+  streak_5: { name: 'Unstoppable', desc: 'Reach a 5-kill streak' },
+  wreck_10: { name: 'Wrecking Ball', desc: 'Destroy 10 vehicles' },
+  five_star: { name: 'Public Enemy', desc: 'Reach a 5-star wanted level' },
+  rich: { name: 'High Roller', desc: 'Hold $10,000 cash' },
+  jobs_10: { name: 'Career Criminal', desc: 'Complete 10 missions' },
+  level_5: { name: 'Veteran', desc: 'Reach level 5' },
+  drift_king: { name: 'Drift King', desc: 'Bank a 500-point drift combo' },
+} as const
+
+export type AchievementId = keyof typeof ACHIEVEMENTS
+
 export const NITRO = {
   /** Throttle multiplier while boosting. */
   MULT: 1.8,

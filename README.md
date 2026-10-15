@@ -8,7 +8,7 @@
 
 **[🎮 Play on Vercel](https://neon-haven-two.vercel.app)** · **[🎮 Play on GitHub Pages](https://aniruddhaadak80.github.io/neon-haven)** · [Source](https://github.com/aniruddhaadak80/neon-haven) · [Issues](https://github.com/aniruddhaadak80/neon-haven/issues)
 
-![Engine](https://img.shields.io/badge/Three.js-0.181-black?style=flat-square) ![Next.js](https://img.shields.io/badge/Next.js-15.5-000?style=flat-square) ![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square) ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178c6?style=flat-square) ![Tests](https://img.shields.io/badge/tests-41%20passing-brightgreen?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-f0b429?style=flat-square) ![Pages](https://img.shields.io/github/deployments/aniruddhaadak80/neon-haven/github-pages?label=pages&style=flat-square)
+![Engine](https://img.shields.io/badge/Three.js-0.181-black?style=flat-square) ![Next.js](https://img.shields.io/badge/Next.js-15.5-000?style=flat-square) ![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square) ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178c6?style=flat-square) ![Tests](https://img.shields.io/badge/tests-55%20passing-brightgreen?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-f0b429?style=flat-square) ![Pages](https://img.shields.io/github/deployments/aniruddhaadak80/neon-haven/github-pages?label=pages&style=flat-square)
 
 </div>
 
@@ -38,6 +38,8 @@ Open http://localhost:3000 and click **START GAME**.
 - **Drivable vehicles** — 19 car models with custom arcade physics: acceleration, braking, drifting (handbrake), body roll, spinning/steering wheels, and collisions. Enter/exit any car with `F` — parked, moving traffic, or cop cruisers.
 - **Nitro boost** — hold `Shift` while driving to burn the nitro meter: 1.8× top speed, blue exhaust flames, camera shake. The meter regenerates when you coast.
 - **Ride condition HUD** — your car's health and nitro show as live bars next to the speedometer; paint chars as it takes damage.
+- **Drift scoring** — throw the handbrake and hold the slide: a pulsing `DRIFT ×` combo builds while you're slipping at speed, then banks into cash when the drift ends (500+ points unlocks an achievement).
+- **Night traffic lights** — every nearby car (traffic and police) switches on headlights when the sun goes down.
 - **Pay'n'Spray** — drive into the amber garage beacon to repair your ride and wipe your record for $200 (mapped as a diamond on the fullscreen map).
 
 ### Combat & crime
@@ -49,7 +51,8 @@ Open http://localhost:3000 and click **START GAME**.
 
 ### Missions & progression
 - **Seven mission types** — courier deliveries, rampage wrecks, getaway escapes (only offered while wanted), taxi fares, checkpoint street races, assassinations with a living marked target, and multi-package stash runs — all with timers, map markers, and cash rewards.
-- **Career stats** — hold `K` for lifetime kills, missions, cash, streaks, and level. XP and cash persist in `localStorage`.
+- **Eight achievements** — First Blood, Unstoppable (5-kill streak), Wrecking Ball (10 wrecks), Public Enemy (5 stars), High Roller ($10k), Career Criminal (10 jobs), Veteran (level 5), and Drift King (500-point combo) — one-time toasts, persisted in your save, tracked in the stats overlay.
+- **Career stats** — hold `K` for lifetime kills, missions, cash, streaks, achievements, and level. XP and cash persist in `localStorage`.
 - **Procedural audio** — engine that revs with speed, two-tone police siren, gunfire, explosions, and a 3-station synth radio — all synthesized with WebAudio. Zero audio files.
 - **Touch controls** — virtual joystick plus Fire / Punch / Jump / Brake / **Nitro** buttons on mobile.
 
@@ -82,12 +85,12 @@ On touch devices you get a virtual joystick plus Fire / Punch / Jump / Brake / N
 ## Testing
 
 ```bash
-npm test         # vitest — 41 tests
+npm test         # vitest — 55 tests
 npm run typecheck
 npm run lint
 ```
 
-The suite covers the pure-logic core: math/RNG utilities, the wanted-level state machine (thresholds, decay, undercover cooldown, star drop), every one of the seven mission flows (offer → progress → complete/fail), collision resolution invariants, and an asset-manifest check that pins every model/texture the game references to disk. CI runs typecheck + tests before every Pages deploy.
+The suite covers the pure-logic core: math/RNG utilities, the wanted-level state machine (thresholds, decay, undercover cooldown, star drop), every one of the seven mission flows (offer → progress → complete/fail), collision resolution invariants, the drift-combo scorer (thresholds, banking, payout floors), the achievement unlock/restore logic, and an asset-manifest check that pins every model/texture the game references to disk. CI runs typecheck + tests before every Pages deploy.
 
 ## Project structure
 
@@ -103,7 +106,7 @@ src/
     world/City.ts     # procedural city generation + collision
     entities/         # Vehicle, Player, Ped
     systems/          # Traffic, Police, Wanted, Missions, DayNight, Audio, Particles
-    __tests__/        # vitest suite (utils, wanted, missions, city, assets)
+    __tests__/        # vitest suite (utils, wanted, missions, city, drift, achievements, assets)
 public/
   models/         # prepared GLBs (regenerated by scripts/prepare-models.mjs)
 docs/

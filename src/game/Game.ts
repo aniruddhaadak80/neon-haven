@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { WORLD, PLAYER, CAR, PEDS, POLICE, RENDER, CAMERA, SAVE_KEY, WANTED, WEAPONS, WEAPON_ORDER, PICKUPS, MELEE, STREAK, NITRO, PAYNSPRAY } from './config'
+import { WORLD, PLAYER, CAR, PEDS, POLICE, RENDER, CAMERA, SAVE_KEY, WANTED, WEAPONS, WEAPON_ORDER, PICKUPS, MELEE, STREAK, NITRO, PAYNSPRAY, DRIFT, ACHIEVEMENTS, type AchievementId } from './config'
 import { Input } from './input'
 import { buildCity, resolveCollision, isBlocked, type CityData } from './world/City'
 import { Player, createPlayer } from './entities/Player'
@@ -12,6 +12,8 @@ import { Traffic } from './systems/Traffic'
 import { Police } from './systems/Police'
 import { WantedSystem } from './systems/Wanted'
 import { MissionSystem } from './systems/Missions'
+import { DriftScorer } from './systems/Drift'
+import { Achievements } from './systems/Achievements'
 import { hud } from './systems/HudStore'
 import { getVehicleModel, TRAFFIC_MODELS, CHARACTER_KEYS, getStaticGeometry, getTexture } from './assets/AssetLibrary'
 import { clamp, damp, dist2D, formatDist } from './utils'
@@ -71,6 +73,9 @@ export class Game {
   private streak = 0
   private streakTimer = 0
   private meleeTimer = 0
+  /** Drift-combo scorer + achievement unlocks. */
+  private drift = new DriftScorer()
+  private achievements = new Achievements()
   /** Pay'n'Spray garage marker + enter-edge tracking. */
   private garage: THREE.Group | null = null
   private garageInside = false
@@ -90,6 +95,7 @@ export class Game {
     this.save = this.loadSave()
     this.stats = { ...this.save.stats }
     this.bestWanted = this.save.bestWanted
+    this.achievements = new Achievements(this.save.achievements)
 
     this.input.onPause = () => {
       if (hud.state.phase === 'playing') this.pause()
@@ -115,6 +121,7 @@ export class Game {
       money: 0, xp: 0, level: 1,
       stats: { distance: 0, crimes: 0, jobs: 0, carsDestroyed: 0, pedsHit: 0 },
       bestWanted: 0,
+      achievements: [],
     }
   }
 
@@ -125,6 +132,7 @@ export class Game {
       level: this.save.level,
       stats: { ...this.stats },
       bestWanted: this.bestWanted,
+      achievements: this.achievements.ids,
     }
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.save)) } catch { /* ignore */ }
   }
@@ -300,6 +308,9 @@ export class Game {
       this.updateOnFoot(dt)
     }
 
+    // --- Drift combo (banks when the drift ends or you leave the car) ---
+    this.updateDrift(dt)
+
     // --- Weapon switching (1-4) ---
     for (let i = 0; i < WEAPON_ORDER.length; i++) {
       if (this.input.consume(`weapon${i + 1}`)) {
@@ -385,6 +396,7 @@ export class Game {
     this.wanted.update(dt, policeNear)
     if (this.wanted.level > this.bestWanted) {
       this.bestWanted = this.wanted.level
+      if (this.bestWanted >= 5) this.award('five_star')
     }
 
     // --- Audio ---
@@ -397,7 +409,7 @@ export class Game {
     this.audio.setSiren(this.police.cars.length > 0 && this.wanted.level > 0)
     this.audio.updateSiren(performance.now() / 1000)
 
-    // Headlights at night: player car + nearby cruisers.
+    // Headlights at night: player car + nearby cruisers + nearby traffic.
     const night = this.dayNight.isNight
     if (this.player.vehicle) this.player.vehicle.setHeadlights(night)
     for (const v of this.vehicles) {
@@ -405,6 +417,10 @@ export class Game {
     }
     for (const c of this.police.cars) {
       const near = dist2D(c.pos.x, c.pos.z, this.player.pos.x, this.player.pos.z) < 60
+      c.setHeadlights(night && near)
+    }
+    for (const c of this.traffic.cars) {
+      const near = dist2D(c.pos.x, c.pos.z, this.player.pos.x, this.player.pos.z) < 45
       c.setHeadlights(night && near)
     }
 
@@ -818,6 +834,7 @@ export class Game {
 
   private onCarDestroyed(car: VehicleEntity, byPlayer = false) {
     this.stats.carsDestroyed++
+    if (this.stats.carsDestroyed >= 10) this.award('wreck_10')
     this.missions.notifyCarDestroyed()
     this.audio.explosion()
     this.particles.explosion(car.pos.clone().setY(0.5))
@@ -853,13 +870,35 @@ export class Game {
 
   /** Kill-streak XP: kills within STREAK.WINDOW of each other chain a multiplier. */
   private registerKill() {
+    this.award('first_blood')
     this.streak = this.streakTimer > 0 ? this.streak + 1 : 1
     this.streakTimer = STREAK.WINDOW
+    if (this.streak >= 5) this.award('streak_5')
     if (this.streak >= 2) {
       const bonus = this.streak * STREAK.XP_PER_LEVEL
       this.gainXp(bonus)
       hud.toast(`Kill x${this.streak}! +${bonus} XP`, 'bad')
     }
+  }
+
+  /** Unlock an achievement (one-time toast + save). */
+  private award(id: AchievementId) {
+    if (!this.achievements.unlock(id)) return
+    hud.toast(`🏆 Achievement: ${ACHIEVEMENTS[id].name}`, 'good')
+    this.persist()
+  }
+
+  /** Drift-combo scoring: feed slip/speed each frame, bank payouts on end. */
+  private updateDrift(dt: number) {
+    const v = this.player.isDriving ? this.player.vehicle : null
+    const slipping = v !== null && Math.abs(v.latVel) >= DRIFT.MIN_SLIP
+    const speed = v !== null ? Math.abs(v.speedKmh) : 0
+    const bank = this.drift.update(dt, slipping, speed)
+    if (!bank) return
+    const cash = bank.score * DRIFT.CASH_PER
+    this.addMoney(cash)
+    hud.toast(`Drift ${bank.seconds.toFixed(1)}s — +$${cash}`, 'good')
+    if (bank.score >= 500) this.award('drift_king')
   }
 
   // --- Weapon pickups ---
@@ -1107,6 +1146,7 @@ export class Game {
       inCar: this.player.isDriving,
       carHealth: this.player.vehicle ? Math.max(0, Math.round((this.player.vehicle.health / CAR.HEALTH) * 100)) : null,
       nitro: this.player.vehicle ? Math.round(this.player.vehicle.nitro) : null,
+      drift: this.drift.display,
       mission: mission ? { ...mission, dist } : null,
       radioOn: this.audio.radioOn,
       radioStation: this.audio.radioStation,
@@ -1120,6 +1160,7 @@ export class Game {
   // --- Actions from UI ---
   addMoney(amount: number) {
     this.save.money += amount
+    if (this.save.money >= 10000) this.award('rich')
     this.gainXp(Math.round(amount * 0.5))
     this.persist()
   }
@@ -1131,6 +1172,7 @@ export class Game {
     if (newLevel > this.save.level) {
       this.save.level = newLevel
       hud.toast(`Level up! Now level ${newLevel}`, 'good')
+      if (newLevel >= 5) this.award('level_5')
     }
   }
 
@@ -1139,6 +1181,7 @@ export class Game {
     if (!m) return
     this.addMoney(m.reward)
     this.stats.jobs++
+    if (this.stats.jobs >= 10) this.award('jobs_10')
     hud.toast(`Mission complete! +$${m.reward}`, 'good')
     this.persist()
   }

@@ -18,6 +18,8 @@ export interface HudState {
   carHealth: number | null
   /** Driven vehicle nitro 0..100 (null on foot). */
   nitro: number | null
+  /** Active drift-combo points (0 when not drifting). */
+  drift: number
   mission: { title: string; time: string; dist: string } | null
   radioOn: boolean
   radioStation: number
@@ -57,6 +59,7 @@ class HudStore {
     inCar: false,
     carHealth: null,
     nitro: null,
+    drift: 0,
     mission: null,
     radioOn: false,
     radioStation: 0,
@@ -73,6 +76,7 @@ class HudStore {
       money: 0, xp: 0, level: 1,
       stats: { distance: 0, crimes: 0, jobs: 0, carsDestroyed: 0, pedsHit: 0 },
       bestWanted: 0,
+      achievements: [],
     },
   }
 
