@@ -252,3 +252,62 @@ export const PAYNSPRAY = {
   /** Service radius around the garage marker. */
   RADIUS: 4,
 } as const
+
+export const FOCUS = {
+  /** Max focus meter. */
+  MAX: 100,
+  /** Meter burn per second while active. */
+  DRAIN: 30,
+  /** Meter regen per second while inactive. */
+  REGEN: 12,
+  /** World time multiplier while bullet time is active. */
+  TIMESCALE: 0.4,
+  /** Meter must be at least this full to start slow-mo. */
+  MIN_START: 15,
+} as const
+
+export const GRENADE = {
+  /** Throw speed in m/s. */
+  FORCE: 13,
+  GRAVITY: 19,
+  /** Seconds from throw to detonation. */
+  FUSE: 1.5,
+  /** Blast radius in meters. */
+  RADIUS: 4.5,
+  /** Damage at the epicenter (falls off linearly to the edge). */
+  DAMAGE: 130,
+  /** Seconds between throws. */
+  COOLDOWN: 1.1,
+  /** Energy kept on each bounce. */
+  BOUNCE: 0.45,
+  /** Live grenades at once. */
+  MAX: 3,
+} as const
+
+export const ATM = {
+  /** ATMs scattered through the city. */
+  COUNT: 8,
+  /** Interaction range in meters. */
+  RANGE: 2.6,
+  MIN_CASH: 150,
+  MAX_CASH: 420,
+  /** Seconds before an ATM can be hit again. */
+  COOLDOWN: 75,
+  /** Heat gained per robbery. */
+  WANTED: 130,
+} as const
+
+export const ROADBLOCK = {
+  /** Stars before cops start boxing you in ahead. */
+  WANTED: 3,
+  /** How far ahead of the player to set the trap (meters). */
+  LOOKAHEAD: 55,
+  /** Seconds between roadblock attempts while eligible. */
+  INTERVAL: 14,
+  /** Extra cruisers parked across the road. */
+  CARS: 2,
+  /** Seconds the roadblock reinforcement stays above the normal count. */
+  DURATION: 25,
+  /** Gap between parked cruisers. */
+  SPACING: 3.4,
+} as const

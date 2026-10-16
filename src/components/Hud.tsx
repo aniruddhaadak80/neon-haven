@@ -130,6 +130,14 @@ export function Hud({ gameRef }: { gameRef: React.MutableRefObject<{ setMinimapC
               <div className="armor-fill" style={{ width: `${state.armor}%` }} />
             </div>
           )}
+          {!state.inCar && (
+            <div className="focus-bar" title="Focus — hold Q for bullet time">
+              <div
+                className={`focus-fill ${state.focusOn ? 'draining' : ''}`}
+                style={{ width: `${state.focus}%` }}
+              />
+            </div>
+          )}
         </div>
       </div>
 

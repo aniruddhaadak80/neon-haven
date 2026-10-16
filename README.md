@@ -8,7 +8,7 @@
 
 **[🎮 Play on Vercel](https://neon-haven-two.vercel.app)** · **[🎮 Play on GitHub Pages](https://aniruddhaadak80.github.io/neon-haven)** · [Source](https://github.com/aniruddhaadak80/neon-haven) · [Issues](https://github.com/aniruddhaadak80/neon-haven/issues)
 
-![Engine](https://img.shields.io/badge/Three.js-0.181-black?style=flat-square) ![Next.js](https://img.shields.io/badge/Next.js-15.5-000?style=flat-square) ![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square) ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178c6?style=flat-square) ![Tests](https://img.shields.io/badge/tests-55%20passing-brightgreen?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-f0b429?style=flat-square) ![Pages](https://img.shields.io/github/deployments/aniruddhaadak80/neon-haven/github-pages?label=pages&style=flat-square)
+![Engine](https://img.shields.io/badge/Three.js-0.181-black?style=flat-square) ![Next.js](https://img.shields.io/badge/Next.js-15.5-000?style=flat-square) ![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square) ![TypeScript](https://img.shields.io/badge/TypeScript-Strict-3178c6?style=flat-square) ![Tests](https://img.shields.io/badge/tests-85%20passing-brightgreen?style=flat-square) ![License](https://img.shields.io/badge/license-MIT-f0b429?style=flat-square) ![Pages](https://img.shields.io/github/deployments/aniruddhaadak80/neon-haven/github-pages?label=pages&style=flat-square)
 
 </div>
 
@@ -44,13 +44,17 @@ Open http://localhost:3000 and click **START GAME**.
 
 ### Combat & crime
 - **Weapons** — floating blasters hidden through the city: SMG, Rifle, and Heavy, each with its own damage, fire rate, tracer color, and gunshot pitch. Switch with `1–4`. Hitmarkers confirm your shots.
+- **Grenades** — lob explosives with `G`: real arc physics with gravity and ground bounces, a 1.5s fuse, and a blast that chunks everything inside 4.5m — peds, traffic, cop cars, or you. Heat rises; up to three live at once.
 - **Melee combat** — punch and kick up close (`E`) with dedicated swing animations, hitmarkers, and kill streaks that pay bonus XP.
 - **Wanted system** — commit crimes and police heat rises through 5 stars. Police chase, ram, and shoot back — gunfire chews up your car first, then you. Drop stars by staying out of sight, scrub heat with **bribe pickups** (gold shards), or go **undercover**: steal a cop car and heat decays faster while you're driving it.
+- **Police roadblocks** — at 3+ stars the cops start setting up ahead: cruisers parked across the street you're hurtling down, facing your approach. They ride above the normal patrol count for 25 seconds.
 - **Death matters** — get killed and you wake up at the hospital minus 10% cash, heat cleared, mission dropped.
 - **Pickups** — blue armor shards (+50), red health packs (+50), gold bribes (−heat), all respawn over time.
+- **ATM robberies** — walk up to a neon ATM kiosk and press `F` to crack it for $150–420. Heat jumps, and each machine needs 75 seconds to cool down (dim screen + hollow pink minimap icon while cooling).
 
 ### Missions & progression
 - **Seven mission types** — courier deliveries, rampage wrecks, getaway escapes (only offered while wanted), taxi fares, checkpoint street races, assassinations with a living marked target, and multi-package stash runs — all with timers, map markers, and cash rewards.
+- **Bullet time** — hold `Q` (or the touch SLOW button) to slow the whole world to 40% speed while your focus meter burns; streak kills during slow-mo pay **double XP**. The meter regenerates while you play normally.
 - **Eight achievements** — First Blood, Unstoppable (5-kill streak), Wrecking Ball (10 wrecks), Public Enemy (5 stars), High Roller ($10k), Career Criminal (10 jobs), Veteran (level 5), and Drift King (500-point combo) — one-time toasts, persisted in your save, tracked in the stats overlay.
 - **Career stats** — hold `K` for lifetime kills, missions, cash, streaks, achievements, and level. XP and cash persist in `localStorage`.
 - **Procedural audio** — engine that revs with speed, two-tone police siren, gunfire, explosions, and a 3-station synth radio — all synthesized with WebAudio. Zero audio files.
@@ -66,13 +70,15 @@ Open http://localhost:3000 and click **START GAME**.
 | `F` | Enter / Exit car (steal anything — parked, traffic, cop cruisers) |
 | `Space` | Jump (on foot) / Handbrake (driving) |
 | `Shift` | Sprint (on foot) / **Nitro** (driving) |
+| `Q` (hold) | **Focus** — bullet time (on foot or driving) |
+| `G` | Throw grenade (on foot) |
 | `1–4` | Switch weapon (pistol / SMG / rifle / heavy) |
 | `R` / `T` | Radio on/off / next station |
 | `M` (hold) / `K` (hold) | Fullscreen map / Career stats |
 | `Esc` / `P` | Pause |
 
-Walk up to any car — parked, traffic, even a cop cruiser — and press `F` to take it.
-On touch devices you get a virtual joystick plus Fire / Punch / Jump / Brake / Nitro buttons.
+Walk up to any car — parked, traffic, even a cop cruiser — and press `F` to take it. Press `F` next to a neon ATM instead to crack it.
+On touch devices you get a virtual joystick plus Fire / Punch / Use / Jump / Brake / Nitro / Nade / Slow buttons.
 
 ## Tech
 
@@ -85,12 +91,12 @@ On touch devices you get a virtual joystick plus Fire / Punch / Jump / Brake / N
 ## Testing
 
 ```bash
-npm test         # vitest — 55 tests
+npm test         # vitest — 85 tests
 npm run typecheck
 npm run lint
 ```
 
-The suite covers the pure-logic core: math/RNG utilities, the wanted-level state machine (thresholds, decay, undercover cooldown, star drop), every one of the seven mission flows (offer → progress → complete/fail), collision resolution invariants, the drift-combo scorer (thresholds, banking, payout floors), the achievement unlock/restore logic, and an asset-manifest check that pins every model/texture the game references to disk. CI runs typecheck + tests before every Pages deploy.
+The suite covers the pure-logic core: math/RNG utilities, the wanted-level state machine (thresholds, decay, undercover cooldown, star drop), every one of the seven mission flows (offer → progress → complete/fail), collision resolution invariants, the drift-combo scorer, the achievement unlock/restore logic, the focus/bullet-time meter, grenade physics (arc, bounces, fuse, capacity, blast falloff), ATM robbery payouts/cooldowns, roadblock planning (street snapping, dominant-axis choice), and an asset-manifest check that pins every model/texture the game references to disk. CI runs typecheck + tests before every Pages deploy.
 
 ## Project structure
 
@@ -105,8 +111,10 @@ src/
     assets/           # GLB loading, vehicle/character factories
     world/City.ts     # procedural city generation + collision
     entities/         # Vehicle, Player, Ped
-    systems/          # Traffic, Police, Wanted, Missions, DayNight, Audio, Particles
-    __tests__/        # vitest suite (utils, wanted, missions, city, drift, achievements, assets)
+    systems/          # Traffic, Police, Wanted, Missions, DayNight, Audio, Particles,
+                      # Drift, Achievements, Focus (bullet time), Grenades, Atm, Roadblock
+    __tests__/        # vitest suite (utils, wanted, missions, city, drift, achievements,
+                      # focus, grenades, atms, roadblock, assets)
 public/
   models/         # prepared GLBs (regenerated by scripts/prepare-models.mjs)
 docs/

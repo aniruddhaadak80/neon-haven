@@ -8,6 +8,8 @@ export interface InputState {
   sprint: boolean
   handbrake: boolean
   jump: boolean
+  /** Hold for bullet time (on foot or driving). */
+  focus: boolean
   /** Edge-triggered actions consumed by the game. */
   interact: boolean
   shoot: boolean
@@ -22,7 +24,7 @@ export interface InputState {
   /** Pointer is locked (mouse look active). */
   locked: boolean
   /** Touch joystick vector (-1..1) and buttons. */
-  touch: { active: boolean; x: number; y: number; fire: boolean; action: boolean; brake: boolean; nitro: boolean }
+  touch: { active: boolean; x: number; y: number; fire: boolean; action: boolean; brake: boolean; nitro: boolean; focus: boolean }
 }
 
 const KEY_MAP: Record<string, keyof InputState> = {
@@ -37,16 +39,17 @@ const KEY_MAP: Record<string, keyof InputState> = {
   ShiftLeft: 'sprint',
   ShiftRight: 'sprint',
   Space: 'handbrake',
+  KeyQ: 'focus',
 }
 
 export class Input {
   state: InputState = {
     forward: false, back: false, left: false, right: false,
-    sprint: false, handbrake: false, jump: false,
+    sprint: false, handbrake: false, jump: false, focus: false,
     interact: false, shoot: false, shootHeld: false,
     radio: false, pause: false, map: false, camera: false,
     lookX: 0, lookY: 0, locked: false,
-    touch: { active: false, x: 0, y: 0, fire: false, action: false, brake: false, nitro: false },
+    touch: { active: false, x: 0, y: 0, fire: false, action: false, brake: false, nitro: false, focus: false },
   }
 
   private keys = new Set<string>()
@@ -107,6 +110,7 @@ export class Input {
     if (e.code === 'KeyM') { this.state.map = true; this.edge.add('map'); this.onMap?.(true) }
     if (e.code === 'KeyK') { this.onStats?.(true) }
     if (e.code === 'KeyE') this.edge.add('melee')
+    if (e.code === 'KeyG') this.edge.add('grenade')
     if (e.code === 'Escape' || e.code === 'KeyP') { this.edge.add('pause'); this.onPause?.() }
     if (e.code === 'Space') { this.state.jump = true; this.edge.add('jump') }
   }
@@ -173,6 +177,11 @@ export class Input {
   /** Touch punch button: single edge per tap. */
   punch() {
     this.edge.add('melee')
+  }
+
+  /** Touch grenade button: single edge per tap. */
+  grenade() {
+    this.edge.add('grenade')
   }
 
   /** Clear per-frame deltas. Call at end of frame. */

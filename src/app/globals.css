@@ -201,6 +201,33 @@ canvas {
   to { transform: scale(1.08); }
 }
 
+.focus-bar {
+  width: 160px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  margin-top: 5px;
+  margin-left: auto;
+}
+
+.focus-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffd75e, #b14dff);
+  transition: width 0.15s;
+}
+
+.focus-fill.draining {
+  box-shadow: 0 0 10px rgba(177, 77, 255, 0.9);
+  animation: focus-burn 0.3s linear infinite alternate;
+}
+
+@keyframes focus-burn {
+  from { filter: brightness(1); }
+  to { filter: brightness(1.6); }
+}
+
 .speedo {
   font-size: 44px;
   font-weight: 900;

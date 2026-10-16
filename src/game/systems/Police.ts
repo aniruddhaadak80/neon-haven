@@ -1,9 +1,10 @@
 import * as THREE from 'three'
-import { POLICE, WORLD } from '../config'
+import { POLICE, WORLD, ROADBLOCK } from '../config'
 import { VehicleEntity } from '../entities/Vehicle'
 import { getVehicleModel, POLICE_MODEL } from '../assets/AssetLibrary'
 import { makeRng, randRange } from '../utils'
 import type { CityData } from '../world/City'
+import type { RoadblockPlan } from './Roadblock'
 
 const rng = makeRng(WORLD.SEED + 777)
 
@@ -27,15 +28,30 @@ export class Police {
     return POLICE.PER_LEVEL[Math.min(wanted, POLICE.PER_LEVEL.length - 1)] ?? 0
   }
 
-  spawn(playerPos: THREE.Vector3) {
+  /** Seconds the roadblock reinforcement is allowed above the base count. */
+  private roadblockUntil = 0
+
+  /** Park cruisers across the street ahead, facing the player's approach. */
+  spawnRoadblock(plan: RoadblockPlan, facePos: THREE.Vector3) {
+    this.roadblockUntil = performance.now() / 1000 + ROADBLOCK.DURATION
+    for (let i = 0; i < ROADBLOCK.CARS; i++) {
+      const off = (i - (ROADBLOCK.CARS - 1) / 2) * ROADBLOCK.SPACING
+      const x = plan.axis === 'x' ? plan.x + off : plan.x
+      const z = plan.axis === 'z' ? plan.z + off : plan.z
+      const heading = Math.atan2(facePos.x - x, facePos.z - z)
+      this.spawn(facePos, { x, z, heading })
+    }
+  }
+
+  spawn(playerPos: THREE.Vector3, at?: { x: number; z: number; heading: number }) {
     if (!this.modelReady) return
-    // Spawn on a street near the player.
+    // Spawn on a street near the player, or at a roadblock slot.
     const ang = randRange(rng, 0, Math.PI * 2)
     const dist = randRange(rng, 24, 40)
-    const x = playerPos.x + Math.cos(ang) * dist
-    const z = playerPos.z + Math.sin(ang) * dist
+    const x = at ? at.x : playerPos.x + Math.cos(ang) * dist
+    const z = at ? at.z : playerPos.z + Math.sin(ang) * dist
     getVehicleModel(POLICE_MODEL).then((vm) => {
-      const heading = Math.atan2(playerPos.x - x, playerPos.z - z)
+      const heading = at ? at.heading : Math.atan2(playerPos.x - x, playerPos.z - z)
       const car = new VehicleEntity(POLICE_MODEL, vm, x, z, heading)
       car.police = true
       car.siren = true
@@ -56,7 +72,9 @@ export class Police {
    * @returns damage to the player this frame (from police gunfire).
    */
   update(dt: number, wanted: number, playerPos: THREE.Vector3, playerVehicle: VehicleEntity | null, playerDead: boolean): number {
-    const target = this.targetCount(wanted)
+    // Roadblock cruisers ride above the normal count until their shift ends.
+    const extra = performance.now() / 1000 < this.roadblockUntil ? ROADBLOCK.CARS : 0
+    const target = this.targetCount(wanted) + extra
 
     // Spawn/despawn to match wanted level.
     while (this.cars.length < target) this.spawn(playerPos)

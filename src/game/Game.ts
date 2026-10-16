@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { WORLD, PLAYER, CAR, PEDS, POLICE, RENDER, CAMERA, SAVE_KEY, WANTED, WEAPONS, WEAPON_ORDER, PICKUPS, MELEE, STREAK, NITRO, PAYNSPRAY, DRIFT, ACHIEVEMENTS, type AchievementId } from './config'
+import { WORLD, PLAYER, CAR, PEDS, POLICE, RENDER, CAMERA, SAVE_KEY, WANTED, WEAPONS, WEAPON_ORDER, PICKUPS, MELEE, STREAK, NITRO, PAYNSPRAY, DRIFT, ACHIEVEMENTS, FOCUS, GRENADE, ATM, ROADBLOCK, type AchievementId } from './config'
 import { Input } from './input'
 import { buildCity, resolveCollision, isBlocked, type CityData } from './world/City'
 import { Player, createPlayer } from './entities/Player'
@@ -14,9 +14,13 @@ import { WantedSystem } from './systems/Wanted'
 import { MissionSystem } from './systems/Missions'
 import { DriftScorer } from './systems/Drift'
 import { Achievements } from './systems/Achievements'
+import { FocusMeter } from './systems/Focus'
+import { GrenadeSystem, blastFalloff } from './systems/Grenades'
+import { AtmSystem } from './systems/Atm'
+import { planRoadblock } from './systems/Roadblock'
 import { hud } from './systems/HudStore'
 import { getVehicleModel, TRAFFIC_MODELS, CHARACTER_KEYS, getStaticGeometry, getTexture } from './assets/AssetLibrary'
-import { clamp, damp, dist2D, formatDist } from './utils'
+import { clamp, damp, dist2D, formatDist, makeRng } from './utils'
 import type { SaveData } from './types'
 
 interface Shard {
@@ -76,6 +80,15 @@ export class Game {
   /** Drift-combo scorer + achievement unlocks. */
   private drift = new DriftScorer()
   private achievements = new Achievements()
+  /** Bullet time, grenades, ATM robberies, roadblock pacing. */
+  private focus = new FocusMeter()
+  private grenades = new GrenadeSystem()
+  private atms = new AtmSystem([])
+  private grenadeMeshes = new Map<number, THREE.Mesh>()
+  private atmScreens: THREE.MeshBasicMaterial[] = []
+  private grenadeTimer = 0
+  private roadblockTimer = ROADBLOCK.INTERVAL
+  private gameRng = makeRng(WORLD.SEED + 4242)
   /** Pay'n'Spray garage marker + enter-edge tracking. */
   private garage: THREE.Group | null = null
   private garageInside = false
@@ -208,6 +221,7 @@ export class Game {
     await this.spawnPickups()
     this.spawnArmor()
     this.buildGarage()
+    this.buildAtms()
 
     // Snap the camera to the spawn so the first frame isn't a cross-map swoop.
     this.camPos.set(this.city.spawn.x, CAMERA.FOOT_HEIGHT + 1, this.city.spawn.z - CAMERA.FOOT_DIST)
@@ -295,6 +309,10 @@ export class Game {
   private update(dt: number) {
     const input = this.input.state
 
+    // --- Focus (bullet time): Q / touch SLOW burns the meter, world slows ---
+    const wantFocus = (input.focus || input.touch.focus) && !this.player.dead
+    if (this.focus.tick(dt, wantFocus)) dt *= FOCUS.TIMESCALE
+
     // --- Look ---
     if (input.locked) {
       this.camYaw -= input.lookX * 0.0022
@@ -310,6 +328,18 @@ export class Game {
 
     // --- Drift combo (banks when the drift ends or you leave the car) ---
     this.updateDrift(dt)
+
+    // --- Grenades (flight, fuses, detonations) ---
+    this.updateGrenades(dt)
+
+    // --- Police roadblocks ahead of the getaway ---
+    this.updateRoadblocks(dt)
+
+    // --- ATM screens: cyan when ready, dim while cooling ---
+    const nowT = performance.now() / 1000
+    for (let i = 0; i < this.atmScreens.length; i++) {
+      this.atmScreens[i]!.color.setHex(this.atms.isReady(i, nowT) ? 0x22d3ee : 0x33406b)
+    }
 
     // --- Weapon switching (1-4) ---
     for (let i = 0; i < WEAPON_ORDER.length; i++) {
@@ -462,10 +492,33 @@ export class Game {
     this.player.pos.x = clamp(this.player.pos.x, -b, b)
     this.player.pos.z = clamp(this.player.pos.z, -b, b)
 
-    // Enter vehicle (keyboard F, or touch USE button via the 'interact' edge)
+    // Rob ATM (F near one) takes priority over entering a vehicle.
     if (this.input.consume('interact')) {
-      this.tryEnterVehicle()
+      const now = performance.now() / 1000
+      const idx = this.atms.nearest(this.player.pos.x, this.player.pos.z, ATM.RANGE)
+      if (idx >= 0) {
+        const cash = this.atms.rob(idx, now, this.gameRng)
+        if (cash !== null) {
+          this.wanted.addCrime(ATM.WANTED)
+          this.stats.crimes++
+          this.addMoney(cash)
+          hud.toast(`ATM cracked: +$${cash} — heat's on`, 'bad')
+          const s = this.atms.spots[idx]!
+          this.particles.burst(new THREE.Vector3(s.x, 1.4, s.z), 14, 0x22d3ee, 3, 0.6, 1, 3, 0.8)
+          this.audio.impact(0.5)
+        } else {
+          hud.toast('This ATM is already stripped', 'info')
+        }
+      } else {
+        this.tryEnterVehicle()
+      }
     }
+
+    // Throw grenade (G / touch NADE)
+    if (this.input.consume('grenade') && this.grenadeTimer <= 0) {
+      this.throwGrenade()
+    }
+    this.grenadeTimer = Math.max(0, this.grenadeTimer - dt)
 
     // Shoot
     if ((input.shoot || input.touch.fire) && this.player.shootTimer <= 0) {
@@ -738,6 +791,10 @@ export class Game {
   respawn() {
     const fee = Math.floor(this.save.money * 0.1)
     this.save.money -= fee
+    this.focus.reset()
+    this.grenades.clear()
+    for (const m of this.grenadeMeshes.values()) m.removeFromParent()
+    this.grenadeMeshes.clear()
     this.player.respawn(this.city!.spawn)
     this.camPos.copy(this.city!.spawn)
     hud.set({ phase: 'playing', damageFlash: 0 })
@@ -875,9 +932,9 @@ export class Game {
     this.streakTimer = STREAK.WINDOW
     if (this.streak >= 5) this.award('streak_5')
     if (this.streak >= 2) {
-      const bonus = this.streak * STREAK.XP_PER_LEVEL
+      const bonus = this.streak * STREAK.XP_PER_LEVEL * (this.focus.active ? 2 : 1)
       this.gainXp(bonus)
-      hud.toast(`Kill x${this.streak}! +${bonus} XP`, 'bad')
+      hud.toast(`Kill x${this.streak}! +${bonus} XP${this.focus.active ? ' — bullet time!' : ''}`, 'bad')
     }
   }
 
@@ -1035,6 +1092,122 @@ export class Game {
     }
   }
 
+  /** Neon ATM kiosks on street corners: rob with F, per-spot cooldown. */
+  private buildAtms() {
+    const xs = this.city!.streetsX
+    const zs = this.city!.streetsZ
+    const spots: { x: number; z: number }[] = []
+    for (let i = 1; spots.length < ATM.COUNT && i < xs.length * 4; i++) {
+      const x = xs[(i * 2) % xs.length]! + 1.8
+      const z = zs[(i * 3 + 2) % zs.length]! + 1.8
+      if (dist2D(x, z, this.city!.spawn.x, this.city!.spawn.z) < 8) continue
+      spots.push({ x, z })
+    }
+    this.atms = new AtmSystem(spots)
+    for (const s of spots) {
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 1.7, 0.5),
+        new THREE.MeshLambertMaterial({ color: 0x1b2340 }),
+      )
+      body.position.set(s.x, 0.85, s.z)
+      const screen = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.52, 0.4),
+        new THREE.MeshBasicMaterial({ color: 0x22d3ee }),
+      )
+      screen.position.set(s.x, 1.3, s.z + 0.26)
+      this.atmScreens.push(screen.material as THREE.MeshBasicMaterial)
+      this.scene.add(body, screen)
+    }
+  }
+
+  /** Lob a grenade along the camera aim (on foot, G / touch NADE). */
+  private throwGrenade() {
+    const pitch = clamp(this.camPitch + 0.25, -0.1, 1)
+    const id = this.grenades.spawn(
+      this.player.pos.x, 1.3, this.player.pos.z,
+      Math.sin(this.camYaw), Math.cos(this.camYaw),
+      pitch,
+    )
+    if (id === null) return
+    this.grenadeTimer = GRENADE.COOLDOWN
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 10, 8),
+      new THREE.MeshBasicMaterial({ color: 0x66ff88 }),
+    )
+    mesh.position.set(this.player.pos.x, 1.3, this.player.pos.z)
+    this.scene.add(mesh)
+    this.grenadeMeshes.set(id, mesh)
+    this.audio.impact(0.25)
+    this.wanted.addCrime(WANTED.SHOOT)
+    this.stats.crimes++
+  }
+
+  /** Advance fuses; render live grenades; detonate the ones that went off. */
+  private updateGrenades(dt: number) {
+    for (const site of this.grenades.update(dt)) {
+      const m = this.grenadeMeshes.get(site.id)
+      if (m) {
+        m.removeFromParent()
+        this.grenadeMeshes.delete(site.id)
+      }
+      this.explodeAt(new THREE.Vector3(site.x, site.y + 0.2, site.z))
+    }
+    for (const g of this.grenades.list) {
+      this.grenadeMeshes.get(g.id)?.position.set(g.x, g.y, g.z)
+    }
+  }
+
+  /** AoE blast: peds, wrecks, your ride or your body, plus screen shake. */
+  private explodeAt(pos: THREE.Vector3) {
+    this.audio.explosion()
+    this.particles.explosion(pos)
+    this.camShake = Math.min(1, this.camShake + 0.55)
+    const falloff = (x: number, z: number) => blastFalloff(dist2D(x, z, pos.x, pos.z), GRENADE.RADIUS)
+
+    // Player: blast the ride while driving, the body on foot.
+    const pd = falloff(this.player.pos.x, this.player.pos.z) * GRENADE.DAMAGE
+    if (pd > 0) {
+      if (this.player.isDriving && this.player.vehicle) {
+        this.player.vehicle.damageBy(pd) // bail-out handled by updateDriving
+      } else if (!this.player.dead) {
+        this.damagePlayer(pd)
+      }
+    }
+
+    for (const ped of this.peds) {
+      if (ped.state === 'dead') continue
+      if (falloff(ped.pos.x, ped.pos.z) > 0) {
+        this.killPed(ped, ped.pos.clone().setY(1))
+      }
+    }
+
+    for (const car of [...this.vehicles, ...this.traffic.cars, ...this.police.cars]) {
+      if (car.dead || car === this.player.vehicle) continue
+      const f = falloff(car.pos.x, car.pos.z)
+      if (f > 0 && car.damageBy(f * GRENADE.DAMAGE)) this.onCarDestroyed(car, true)
+    }
+  }
+
+  /** Cops box in ahead: plan a trap on the street you're hurtling down. */
+  private updateRoadblocks(dt: number) {
+    const v = this.player.isDriving ? this.player.vehicle : null
+    if (v === null || this.wanted.level < ROADBLOCK.WANTED) {
+      this.roadblockTimer = ROADBLOCK.INTERVAL
+      return
+    }
+    this.roadblockTimer -= dt
+    if (this.roadblockTimer > 0) return
+    this.roadblockTimer = ROADBLOCK.INTERVAL
+    const plan = planRoadblock(
+      v.pos.x, v.pos.z, v.heading,
+      this.city!.streetsX, this.city!.streetsZ,
+      ROADBLOCK.LOOKAHEAD,
+    )
+    if (!plan) return
+    this.police.spawnRoadblock(plan, v.pos)
+    hud.toast('Roadblock ahead!', 'bad')
+  }
+
   /** Blue armor shards (+50), red health packs (+50), gold bribes (-heat). */
   private spawnArmor() {
     this.spawnShards(this.armorPickups, 'armor', 0x3b82f6, PICKUPS.ARMOR_COUNT)
@@ -1147,6 +1320,8 @@ export class Game {
       carHealth: this.player.vehicle ? Math.max(0, Math.round((this.player.vehicle.health / CAR.HEALTH) * 100)) : null,
       nitro: this.player.vehicle ? Math.round(this.player.vehicle.nitro) : null,
       drift: this.drift.display,
+      focus: Math.round(this.focus.value),
+      focusOn: this.focus.active,
       mission: mission ? { ...mission, dist } : null,
       radioOn: this.audio.radioOn,
       radioStation: this.audio.radioStation,
@@ -1287,6 +1462,14 @@ export class Game {
       ctx.fillStyle = '#ffd700'
       ctx.fillRect(mx - 2 * u, mz - 2 * u, 4 * u, 4 * u)
     }
+    // ATMs (pink, hollow when cooling down)
+    const nowA = performance.now() / 1000
+    for (let i = 0; i < this.atms.spots.length; i++) {
+      const s = this.atms.spots[i]!
+      const [mx, mz] = toMap(s.x, s.z)
+      ctx.fillStyle = this.atms.isReady(i, nowA) ? '#ff6fd8' : 'rgba(255,111,216,0.35)'
+      ctx.fillRect(mx - 2 * u, mz - 2 * u, 4 * u, 4 * u)
+    }
 
     // Pay'n'Spray garage
     {
@@ -1349,7 +1532,7 @@ export class Game {
       // Legend
       ctx.fillStyle = 'rgba(255,255,255,0.75)'
       ctx.font = `${13 * u}px sans-serif`
-      ctx.fillText('▲ you   ● police   ■ traffic   ■ weapon   ■ armor   ■ health   ■ bribe   ◆ garage   ● mission', 12 * u, S - 12 * u)
+      ctx.fillText('▲ you   ● police   ■ traffic   ■ weapon   ■ armor   ■ health   ■ bribe   ■ atm   ◆ garage   ● mission', 12 * u, S - 12 * u)
     }
 
     // Border

@@ -69,8 +69,8 @@ export function TouchControls({ gameRef }: { gameRef: React.MutableRefObject<Tou
     }
   }
 
-  const hold = (key: 'fire' | 'brake' | 'nitro', down: boolean) => {
-    input()?.setTouch({ [key]: down } as Partial<{ fire: boolean; brake: boolean; nitro: boolean }>)
+  const hold = (key: 'fire' | 'brake' | 'nitro' | 'focus', down: boolean) => {
+    input()?.setTouch({ [key]: down } as Partial<{ fire: boolean; brake: boolean; nitro: boolean; focus: boolean }>)
   }
 
   const tapAction = () => {
@@ -136,6 +136,21 @@ export function TouchControls({ gameRef }: { gameRef: React.MutableRefObject<Tou
         onTouchEnd={() => hold('brake', false)}
       >
         Brake
+      </button>
+      <button
+        className="touch-btn"
+        style={{ right: 110, bottom: 250 }}
+        onTouchStart={(e) => { e.preventDefault(); input()?.grenade() }}
+      >
+        Nade
+      </button>
+      <button
+        className="touch-btn"
+        style={{ right: 190, bottom: 250 }}
+        onTouchStart={(e) => { e.preventDefault(); hold('focus', true) }}
+        onTouchEnd={() => hold('focus', false)}
+      >
+        Slow
       </button>
     </div>
   )

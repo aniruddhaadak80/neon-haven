@@ -20,6 +20,10 @@ export interface HudState {
   nitro: number | null
   /** Active drift-combo points (0 when not drifting). */
   drift: number
+  /** Focus meter 0..100 (bullet time). */
+  focus: number
+  /** True while bullet time is slowing the world. */
+  focusOn: boolean
   mission: { title: string; time: string; dist: string } | null
   radioOn: boolean
   radioStation: number
@@ -60,6 +64,8 @@ class HudStore {
     carHealth: null,
     nitro: null,
     drift: 0,
+    focus: 100,
+    focusOn: false,
     mission: null,
     radioOn: false,
     radioStation: 0,
