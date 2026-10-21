@@ -3,6 +3,7 @@ import { POLICE, WORLD, ROADBLOCK } from '../config'
 import { VehicleEntity } from '../entities/Vehicle'
 import { getVehicleModel, POLICE_MODEL } from '../assets/AssetLibrary'
 import { makeRng, randRange } from '../utils'
+import { policeShotDamage } from './police-fire'
 import type { CityData } from '../world/City'
 import type { RoadblockPlan } from './Roadblock'
 
@@ -120,9 +121,7 @@ export class Police {
 
       // Shoot at player.
       if (wanted >= POLICE.SHOOT_LEVEL && !playerDead && dist < POLICE.SHOOT_RANGE && Math.abs(headingDiff) < 0.5) {
-        if (rng() < dt * 1.2) {
-          damage += POLICE.SHOOT_DAMAGE * dt
-        }
+        damage += policeShotDamage(dt, rng)
       }
     }
 
