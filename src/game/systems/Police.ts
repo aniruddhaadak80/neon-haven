@@ -31,6 +31,8 @@ export class Police {
 
   /** Seconds the roadblock reinforcement is allowed above the base count. */
   private roadblockUntil = 0
+  /** Cruisers whose model promise has not settled yet. They are not in `cars` yet. */
+  private pendingSpawns = 0
 
   /** Park cruisers across the street ahead, facing the player's approach. */
   spawnRoadblock(plan: RoadblockPlan, facePos: THREE.Vector3) {
@@ -51,7 +53,9 @@ export class Police {
     const dist = randRange(rng, 24, 40)
     const x = at ? at.x : playerPos.x + Math.cos(ang) * dist
     const z = at ? at.z : playerPos.z + Math.sin(ang) * dist
+    this.pendingSpawns += 1
     getVehicleModel(POLICE_MODEL).then((vm) => {
+      this.pendingSpawns = Math.max(0, this.pendingSpawns - 1)
       const heading = at ? at.heading : Math.atan2(playerPos.x - x, playerPos.z - z)
       const car = new VehicleEntity(POLICE_MODEL, vm, x, z, heading)
       car.police = true
@@ -77,8 +81,12 @@ export class Police {
     const extra = performance.now() / 1000 < this.roadblockUntil ? ROADBLOCK.CARS : 0
     const target = this.targetCount(wanted) + extra
 
-    // Spawn/despawn to match wanted level.
-    while (this.cars.length < target) this.spawn(playerPos)
+    // Spawn/despawn to match wanted level. spawn() only adds the car once its
+    // model promise settles, so the shortfall is reconciled once per frame
+    // instead of in a loop — a loop would never see the new car and would
+    // spin forever.
+    const missing = target - this.cars.length - this.pendingSpawns
+    for (let i = 0; i < missing; i++) this.spawn(playerPos)
     while (this.cars.length > target) {
       const c = this.cars.pop()!
       c.dispose()
@@ -131,5 +139,6 @@ export class Police {
   clear() {
     for (const c of this.cars) c.dispose()
     this.cars = []
+    this.pendingSpawns = 0
   }
 }
