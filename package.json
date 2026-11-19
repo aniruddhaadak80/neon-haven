@@ -2,7 +2,7 @@
   "name": "neon-haven",
   "version": "1.0.0",
   "private": true,
-  "description": "NEON HAVEN — an open-world, GTA-style browser game built with Next.js and Three.js. Procedurally generated city, drivable vehicles, pedestrians, wanted level, and missions. All third-party art is Kenney (CC0).",
+  "description": "NEON HAVEN \u2014 an open-world, GTA-style browser game built with Next.js and Three.js. Procedurally generated city, drivable vehicles, pedestrians, wanted level, and missions. All third-party art is Kenney (CC0).",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -19,7 +19,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "next": "15.5.27",
+    "next": "15.5.28",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "three": "0.181.0"
