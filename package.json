@@ -42,5 +42,9 @@
     "@tailwindcss/oxide@4.1.14": true,
     "sharp@0.34.5": true,
     "unrs-resolver@1.12.2": true
+  },
+  "overrides": {
+    "sharp": "0.35.0",
+    "postcss": "8.5.12"
   }
 }
